@@ -12,7 +12,7 @@ permissions:
 jobs:
   identify:
     name: Windows runner identity
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: self-hosted
     timeout-minutes: 10
     steps:
       - name: Identify machine
