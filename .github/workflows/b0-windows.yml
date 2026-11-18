@@ -18,6 +18,9 @@ concurrency:
 jobs:
   windows:
     runs-on: [self-hosted, Windows, X64]
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +57,10 @@ jobs:
       - name: Formatting
         shell: cmd
         run: cargo fmt --all -- --check
+
+      - name: Core revision and coordinate tests
+        shell: cmd
+        run: cargo test --locked -p sandbox-world-core -p sandbox-streaming
 
       - name: Workspace unit tests
         shell: cmd
