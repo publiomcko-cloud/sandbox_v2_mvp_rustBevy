@@ -22,6 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Install Rust into the self-hosted runner service account when not on PATH.
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.100.0
+          components: rustfmt, clippy
+
       - name: Runner identity and Rust toolchain
         shell: cmd
         run: |
