@@ -1,0 +1,15 @@
+[package]
+name = "sandbox-game"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy.workspace = true
+avian3d.workspace = true
+sandbox-gpu-terrain = { path = "../gpu_terrain" }
+
+[[bin]]
+name = "sandbox-game"
+path = "src/main.rs"

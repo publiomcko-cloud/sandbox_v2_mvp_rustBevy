@@ -1,0 +1,60 @@
+name: B0 Windows build and tests
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/b0-*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report toolchain
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Resolve and freeze dependencies
+        run: cargo generate-lockfile
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Unit tests
+        run: cargo test --workspace --locked
+
+      - name: Windows release executable
+        run: cargo build --release --locked -p sandbox-game
+
+      - name: Commit initial Cargo.lock on feature branch
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feat/b0-')
+        shell: pwsh
+        run: |
+          git add Cargo.lock
+          if (git diff --cached --quiet) {
+            Write-Host 'Lockfile unchanged'
+          } else {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'build(b0): freeze resolved Cargo dependencies'
+            git push origin "HEAD:${{ github.ref_name }}"
+          }
+
+      - name: Upload B0 build
+        uses: actions/upload-artifact@v4
+        with:
+          name: b0-windows-release
+          path: |
+            target/release/sandbox-game.exe
+            Cargo.lock
+          if-no-files-found: error
