@@ -1,0 +1,25 @@
+name: Verify second organization runner
+
+# Trusted diagnostic only. Never run untrusted pull request code on a public repo runner.
+on:
+  push:
+    branches:
+      - 'diag/second-org-runner-check-*'
+
+permissions:
+  contents: read
+
+jobs:
+  identify:
+    name: Windows runner identity
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Identify machine
+        shell: cmd
+        run: |
+          echo RUNNER_NAME=%RUNNER_NAME%
+          echo RUNNER_OS=%RUNNER_OS%
+          echo RUNNER_ARCH=%RUNNER_ARCH%
+          echo COMPUTERNAME=%COMPUTERNAME%
+          ver
