@@ -1,6 +1,6 @@
 # Sandbox V2 — MVP B | Rust + Bevy + GPU Compute
 
-**Estado:** especificação inicial; implementação, build e benchmarks ainda não iniciados.
+**Estado:** B0 implementada na branch `feat/b0-rust-bevy-gpu-bootstrap-20261118`, pendente de CI e validação gráfica. B1–B7 não iniciadas.
 
 ## Objetivo
 
@@ -30,6 +30,7 @@ O benchmark será medido no renderizador real, não apenas em tarefas de computa
 
 - [Especificação técnica do MVP B](docs/MVP_B_RUST_BEVY_GPU_COMPUTE.md)
 - [Contrato comum de requisitos e benchmarks](docs/CRITERIOS_COMUNS.md)
+- [Implementação e validação B0](docs/B0_IMPLEMENTATION.md)
 
 ## Sequência inicial
 
@@ -43,4 +44,12 @@ O benchmark será medido no renderizador real, não apenas em tarefas de computa
 
 ## Execução
 
-Ainda não há executável ou comandos de build validados. Eles serão documentados após a primeira compilação reproduzível.
+A B0 já possui código e workflow Windows; compilação e renderização ainda precisam ser verificadas.
+
+```powershell
+git fetch origin
+git switch feat/b0-rust-bevy-gpu-bootstrap-20261118
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-b0.ps1
+```
+
+A janela B0 mostra cubos gerados por compute shader em GPU, câmera com teclas WASD/Q/E (18 m/s), e métricas preliminares do Bevy. **Não** inclui terreno SDF, horizonte 130 m, streaming nem métricas completas de apresentação. O workflow Windows gera o `Cargo.lock` inicial; o lock deve ser commitado antes de integrar à `main`.

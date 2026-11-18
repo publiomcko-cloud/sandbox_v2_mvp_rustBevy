@@ -1,0 +1,6 @@
+/target/
+/reports/generated/
+*.log
+*.pdb
+.DS_Store
+# Cargo.lock intentionally committed for reproducibility.
