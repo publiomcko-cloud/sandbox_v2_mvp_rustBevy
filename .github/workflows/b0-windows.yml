@@ -17,14 +17,13 @@ concurrency:
 
 jobs:
   windows:
-    # Diagnostic selector: isolate label mismatch vs runner-group repository access.
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
       - name: Runner identity and Rust toolchain
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "Runner: $env:RUNNER_NAME ($env:RUNNER_OS/$env:RUNNER_ARCH)"
           Write-Host "Computer: $env:COMPUTERNAME"
@@ -32,15 +31,15 @@ jobs:
           cargo --version
 
       - name: Formatting
-        shell: pwsh
+        shell: powershell
         run: cargo fmt --all -- --check
 
       - name: Workspace unit tests
-        shell: pwsh
+        shell: powershell
         run: cargo test --workspace --locked
 
       - name: Build Windows release
-        shell: pwsh
+        shell: powershell
         run: cargo build --release --locked -p sandbox-game
 
       - name: Upload executable and lockfile
