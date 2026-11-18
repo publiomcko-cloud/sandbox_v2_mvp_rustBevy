@@ -17,7 +17,8 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: [self-hosted, Windows, X64]
+    # Diagnostic selector: isolate label mismatch vs runner-group repository access.
+    runs-on: self-hosted
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
