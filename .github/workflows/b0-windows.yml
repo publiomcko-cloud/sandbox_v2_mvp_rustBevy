@@ -1,59 +1,51 @@
-name: B0 Windows build and tests
+name: B0 Windows self-hosted build and tests
 
+# Security: do not execute untrusted pull_request code on an organization runner.
 on:
   push:
     branches:
       - main
       - 'feat/b0-*'
-  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: b0-windows-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   windows:
-    runs-on: windows-latest
-    timeout-minutes: 90
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
-      - name: Report toolchain
+      - name: Runner identity and Rust toolchain
         shell: pwsh
         run: |
+          Write-Host "Runner: $env:RUNNER_NAME ($env:RUNNER_OS/$env:RUNNER_ARCH)"
+          Write-Host "Computer: $env:COMPUTERNAME"
           rustc --version
           cargo --version
 
-      - name: Resolve and freeze dependencies
-        run: cargo generate-lockfile
-
-      - name: Format check
+      - name: Formatting
+        shell: pwsh
         run: cargo fmt --all -- --check
 
-      - name: Unit tests
+      - name: Workspace unit tests
+        shell: pwsh
         run: cargo test --workspace --locked
 
-      - name: Windows release executable
+      - name: Build Windows release
+        shell: pwsh
         run: cargo build --release --locked -p sandbox-game
 
-      - name: Commit initial Cargo.lock on feature branch
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feat/b0-')
-        shell: pwsh
-        run: |
-          git add Cargo.lock
-          if (git diff --cached --quiet) {
-            Write-Host 'Lockfile unchanged'
-          } else {
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'build(b0): freeze resolved Cargo dependencies'
-            git push origin "HEAD:${{ github.ref_name }}"
-          }
-
-      - name: Upload B0 build
+      - name: Upload executable and lockfile
         uses: actions/upload-artifact@v4
         with:
-          name: b0-windows-release
+          name: b0-windows-org-runner-release
           path: |
             target/release/sandbox-game.exe
             Cargo.lock
