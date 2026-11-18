@@ -30,6 +30,7 @@ pub fn fly_camera(
     }
 
     for mut transform in &mut cameras {
-        transform.translation += velocity.normalize_or_zero() * HORIZONTAL_SPEED_MPS * time.delta_secs();
+        transform.translation +=
+            velocity.normalize_or_zero() * HORIZONTAL_SPEED_MPS * time.delta_secs();
     }
 }

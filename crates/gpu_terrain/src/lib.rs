@@ -19,6 +19,7 @@ use bevy::{
     platform::collections::HashSet,
     prelude::*,
     render::{
+        Render, RenderApp, RenderStartup,
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         mesh::allocator::{MeshAllocator, MeshAllocatorSettings},
         render_resource::{
@@ -26,7 +27,6 @@ use bevy::{
             *,
         },
         renderer::{RenderContext, RenderGraph, RenderQueue},
-        Render, RenderApp, RenderStartup,
     },
 };
 

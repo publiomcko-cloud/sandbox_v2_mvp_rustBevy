@@ -40,7 +40,10 @@ impl<T> Residency<T> {
 
     /// Starting a rebuild does not remove the current published representation.
     pub fn begin(&mut self, revision: u64) -> Option<BuildToken> {
-        if self.visible_revision().is_some_and(|visible| revision < visible) {
+        if self
+            .visible_revision()
+            .is_some_and(|visible| revision < visible)
+        {
             return None;
         }
         self.next_generation = self.next_generation.wrapping_add(1);
