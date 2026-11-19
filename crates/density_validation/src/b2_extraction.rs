@@ -157,6 +157,10 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                 },
             ],
         });
+        // Auto-derived pipeline layouts contain only bindings actually
+        // referenced by each entry point. Vertex stage uses 0/1/2;
+        // index stage uses 0/1/3 (binding 2 is intentionally absent).
+        // Runtime B2 uses an explicit shared four-slot layout instead.
         let vertex_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("B2 vertices group"),
             layout: &vertices_pipeline.get_bind_group_layout(0),
@@ -173,10 +177,6 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                     binding: 2,
                     resource: vertices.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: indices.as_entire_binding(),
-                },
             ],
         });
         let index_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -190,10 +190,6 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: density.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: vertices.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
