@@ -1,0 +1,90 @@
+name: B1 SDF CPU-GPU numeric parity
+
+# Security: do not execute untrusted pull_request code on an organization runner.
+on:
+  push:
+    branches:
+      - main
+      - 'feat/b1-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b1-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: [self-hosted, Windows, X64]
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # Native Windows setup; avoids WSL bash and PowerShell execution policy.
+      # Toolchain state remains under the runner temp directory, not the workspace.
+      - name: Provision Rust 1.100.0 for service account
+        shell: cmd
+        env:
+          CARGO_HOME: ${{ runner.temp }}\\b0-cargo
+          RUSTUP_HOME: ${{ runner.temp }}\\b0-rustup
+        run: |
+          if not exist "%CARGO_HOME%\\bin\\rustup.exe" (
+            curl.exe --proto =https --tlsv1.2 --retry 3 -fL -o "%RUNNER_TEMP%\\rustup-init.exe" https://win.rustup.rs/x86_64
+            if errorlevel 1 exit /b 1
+            "%RUNNER_TEMP%\\rustup-init.exe" -y --no-modify-path --default-toolchain none
+            if errorlevel 1 exit /b 1
+          )
+          "%CARGO_HOME%\\bin\\rustup.exe" toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          if errorlevel 1 exit /b 1
+          echo %CARGO_HOME%\\bin>>"%GITHUB_PATH%"
+          echo CARGO_HOME=%CARGO_HOME%>>"%GITHUB_ENV%"
+          echo RUSTUP_HOME=%RUSTUP_HOME%>>"%GITHUB_ENV%"
+
+      - name: Runner identity and Rust toolchain
+        shell: cmd
+        run: |
+          echo Runner: %RUNNER_NAME% (%RUNNER_OS%/%RUNNER_ARCH%)
+          echo Computer: %COMPUTERNAME%
+          where rustc
+          rustc --version
+          cargo --version
+
+      - name: Check MSVC C++ linker availability
+        shell: cmd
+        run: |
+          where link.exe
+          if errorlevel 1 (
+            echo ERROR: Install Visual Studio Build Tools with Desktop development with C++ and Windows SDK on this runner.
+            exit /b 1
+          )
+
+      - name: Rustfmt
+        shell: cmd
+        run: cargo fmt --all -- --check
+
+      - name: B1 CPU SDF numerical and cave tests
+        shell: cmd
+        run: cargo test --locked -p sandbox-world-core -- --nocapture
+
+      - name: B1 shader WGSL parser and validator
+        shell: cmd
+        run: cargo test --locked -p sandbox-gpu-terrain b1_shader_is_valid_wgsl_and_has_expected_entry_point -- --nocapture
+
+      - name: Full workspace regression
+        shell: cmd
+        run: cargo test --workspace --locked
+
+      - name: Real GPU versus CPU density parity
+        shell: cmd
+        env:
+          WGPU_BACKEND: vulkan
+        run: cargo test --locked -p sandbox-gpu-terrain b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture
+
+      - name: Release regression
+        shell: cmd
+        run: cargo build --release --locked -p sandbox-game
