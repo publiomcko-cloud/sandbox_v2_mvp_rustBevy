@@ -18,7 +18,7 @@ use bevy::{
         extract_component::{ExtractComponent, ExtractComponentPlugin},
         mesh::allocator::{MeshAllocator, MeshAllocatorSettings},
         render_resource::{
-            binding_types::{storage_buffer, uniform_buffer},
+            binding_types::{storage_buffer, storage_buffer_read_only, uniform_buffer},
             *,
         },
         renderer::{RenderContext, RenderGraph, RenderQueue},
@@ -211,7 +211,9 @@ fn init_b2_pipelines(mut commands: Commands, assets: Res<AssetServer>, cache: Re
             ShaderStages::COMPUTE,
             (
                 uniform_buffer::<B2Params>(false),
-                storage_buffer::<Vec<f32>>(true),
+                // WGSL binding 1 is var<storage, read>. The bool in
+                // storage_buffer means *dynamic offset*, not read_only.
+                storage_buffer_read_only::<Vec<f32>>(false),
                 storage_buffer::<Vec<f32>>(false),
                 storage_buffer::<Vec<u32>>(false),
             ),
