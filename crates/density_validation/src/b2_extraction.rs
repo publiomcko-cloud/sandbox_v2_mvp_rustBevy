@@ -106,12 +106,11 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
             },
         ],
     });
-    let surface_pipeline_layout =
-        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("B2 shared Surface Nets pipeline layout regression"),
-            bind_group_layouts: &[Some(&surface_layout)],
-            immediate_size: 0,
-        });
+    let surface_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("B2 shared Surface Nets pipeline layout regression"),
+        bind_group_layouts: &[Some(&surface_layout)],
+        immediate_size: 0,
+    });
     let vertices_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("B2 vertex compute pipeline"),
         layout: Some(&surface_pipeline_layout),
