@@ -1,0 +1,66 @@
+name: B2 real Vulkan Surface Nets extraction proof
+
+on:
+  push:
+    branches:
+      - 'feat/b2-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b2-vulkan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    # This job needs a real Vulkan GPU and working MSVC toolchain.
+    # Label only qualified GPU hosts; generic Windows runners may lack the linker.
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    env:
+      CARGO_BUILD_JOBS: '1'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # Native Windows setup; avoids WSL bash and PowerShell execution policy.
+      # Toolchain state remains under the runner temp directory, not the workspace.
+      - name: Provision Rust 1.100.0 for service account
+        shell: cmd
+        env:
+          CARGO_HOME: ${{ runner.temp }}\\b0-cargo
+          RUSTUP_HOME: ${{ runner.temp }}\\b0-rustup
+        run: |
+          if not exist "%CARGO_HOME%\\bin\\rustup.exe" (
+            curl.exe --proto =https --tlsv1.2 --retry 3 -fL -o "%RUNNER_TEMP%\\rustup-init.exe" https://win.rustup.rs/x86_64
+            if errorlevel 1 exit /b 1
+            "%RUNNER_TEMP%\\rustup-init.exe" -y --no-modify-path --default-toolchain none
+            if errorlevel 1 exit /b 1
+          )
+          "%CARGO_HOME%\\bin\\rustup.exe" toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          if errorlevel 1 exit /b 1
+          echo %CARGO_HOME%\\bin>>"%GITHUB_PATH%"
+          echo CARGO_HOME=%CARGO_HOME%>>"%GITHUB_ENV%"
+          echo RUSTUP_HOME=%RUSTUP_HOME%>>"%GITHUB_ENV%"
+
+      - name: Runner identity and Rust toolchain
+        shell: cmd
+        run: |
+          echo Runner: %RUNNER_NAME% (%RUNNER_OS%/%RUNNER_ARCH%)
+          echo Computer: %COMPUTERNAME%
+          where rustc
+          rustc --version
+          cargo --version
+
+      - name: Rustfmt
+        shell: cmd
+        run: cargo fmt --all -- --check
+
+      - name: Surface Nets real hardware Vulkan geometry gate
+        shell: cmd
+        env:
+          WGPU_BACKEND: vulkan
+        run: cargo test --locked -p sandbox-density-gpu-validation b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry -- --ignored --nocapture
