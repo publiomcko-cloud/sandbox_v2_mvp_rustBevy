@@ -58,15 +58,6 @@ jobs:
         shell: cmd
         run: cargo fmt --all -- --check
 
-      - name: Check MSVC C++ linker availability
-        shell: cmd
-        run: |
-          where link.exe
-          if errorlevel 1 (
-            echo ERROR: Install Visual Studio Build Tools with Desktop development with C++ and Windows SDK on this runner.
-            exit /b 1
-          )
-
       - name: B1 CPU SDF numerical and cave tests
         shell: cmd
         run: cargo test --locked -p sandbox-world-core -- --nocapture
