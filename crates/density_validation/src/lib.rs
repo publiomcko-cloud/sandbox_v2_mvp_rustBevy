@@ -3,3 +3,6 @@
 
 #[cfg(test)]
 mod validation;
+
+#[cfg(test)]
+mod b2_extraction;
