@@ -40,9 +40,8 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
         wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu
     ));
     println!("B2 Vulkan device: {} ({:?})", info.name, info.device_type);
-    let (device, queue) =
-        wait(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-            .expect("B2 Vulkan device unavailable");
+    let (device, queue) = wait(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+        .expect("B2 Vulkan device unavailable");
 
     let density_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("B2 density"),
@@ -88,14 +87,26 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
 
         let mut bytes = Vec::with_capacity(64);
         let uniforms = [
-            grid.base_half[0] as u32, grid.base_half[1] as u32,
-            grid.base_half[2] as u32, 42,
-            grid.step_half as u32, grid.dim as u32,
-            grid.len() as u32, 0,
-            0, count * 8, 0, count * 18,
-            grid.cells as u32, 0, 0, 0,
+            grid.base_half[0] as u32,
+            grid.base_half[1] as u32,
+            grid.base_half[2] as u32,
+            42,
+            grid.step_half as u32,
+            grid.dim as u32,
+            grid.len() as u32,
+            0,
+            0,
+            count * 8,
+            0,
+            count * 18,
+            grid.cells as u32,
+            0,
+            0,
+            0,
         ];
-        for word in uniforms { bytes.extend_from_slice(&word.to_le_bytes()); }
+        for word in uniforms {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
         use wgpu::util::DeviceExt;
         let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("B2 validation params"),
@@ -136,28 +147,58 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
             label: Some("B2 density group"),
             layout: &density_pipeline.get_bind_group_layout(0),
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: density.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: density.as_entire_binding(),
+                },
             ],
         });
         let vertex_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("B2 vertices group"),
             layout: &vertices_pipeline.get_bind_group_layout(0),
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: density.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: vertices.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: indices.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: density.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: vertices.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: indices.as_entire_binding(),
+                },
             ],
         });
         let index_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("B2 indices group"),
             layout: &indices_pipeline.get_bind_group_layout(0),
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: density.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: vertices.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: indices.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: density.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: vertices.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: indices.as_entire_binding(),
+                },
             ],
         });
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -165,7 +206,8 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
         });
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Density"), timestamp_writes: None
+                label: Some("Density"),
+                timestamp_writes: None,
             });
             pass.set_pipeline(&density_pipeline);
             pass.set_bind_group(0, &density_group, &[]);
@@ -173,7 +215,8 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
         }
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Surface vertices"), timestamp_writes: None
+                label: Some("Surface vertices"),
+                timestamp_writes: None,
             });
             pass.set_pipeline(&vertices_pipeline);
             pass.set_bind_group(0, &vertex_group, &[]);
@@ -181,7 +224,8 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
         }
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Surface indices"), timestamp_writes: None
+                label: Some("Surface indices"),
+                timestamp_writes: None,
             });
             pass.set_pipeline(&indices_pipeline);
             pass.set_bind_group(0, &index_group, &[]);
@@ -193,32 +237,56 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
 
         let (vtx, vrx) = std::sync::mpsc::channel();
         let (itx, irx) = std::sync::mpsc::channel();
-        v_staging.slice(..).map_async(wgpu::MapMode::Read, move |s| {
-            let _ = vtx.send(s);
-        });
-        i_staging.slice(..).map_async(wgpu::MapMode::Read, move |s| {
-            let _ = itx.send(s);
-        });
-        device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(Duration::from_secs(30)),
-        }).expect("B2 GPU submission failed");
+        v_staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |s| {
+                let _ = vtx.send(s);
+            });
+        i_staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |s| {
+                let _ = itx.send(s);
+            });
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_secs(30)),
+            })
+            .expect("B2 GPU submission failed");
         vrx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
         irx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
 
         let v_mapping = v_staging.get_mapped_range(..).expect("vertex map");
         let i_mapping = i_staging.get_mapped_range(..).expect("index map");
-        let values: Vec<f32> = v_mapping.chunks_exact(4)
-            .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap())).collect();
-        let list: Vec<u32> = i_mapping.chunks_exact(4)
-            .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap())).collect();
-        assert!(values.iter().all(|v| v.is_finite()), "nonfinite vertex data");
-        assert!(list.iter().all(|index| *index < count), "out-of-range index");
-        let triangles = list.chunks_exact(3)
-            .filter(|triangle| triangle[0] != triangle[1] &&
-                    triangle[1] != triangle[2] && triangle[0] != triangle[2]).count();
+        let values: Vec<f32> = v_mapping
+            .chunks_exact(4)
+            .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+            .collect();
+        let list: Vec<u32> = i_mapping
+            .chunks_exact(4)
+            .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+            .collect();
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "nonfinite vertex data"
+        );
+        assert!(
+            list.iter().all(|index| *index < count),
+            "out-of-range index"
+        );
+        let triangles = list
+            .chunks_exact(3)
+            .filter(|triangle| {
+                triangle[0] != triangle[1]
+                    && triangle[1] != triangle[2]
+                    && triangle[0] != triangle[2]
+            })
+            .count();
         assert!(triangles > 0, "no nondegenerate triangles coord={coord:?}");
-        println!("B2 Vulkan Surface Nets PASS coord={coord:?} lod={lod} triangles={triangles} vertices={count} index_slots={}", list.len());
+        println!(
+            "B2 Vulkan Surface Nets PASS coord={coord:?} lod={lod} triangles={triangles} vertices={count} index_slots={}",
+            list.len()
+        );
         drop(v_mapping);
         drop(i_mapping);
         v_staging.unmap();
