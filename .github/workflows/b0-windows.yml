@@ -70,11 +70,26 @@ jobs:
         shell: cmd
         run: cargo build --release --locked -p sandbox-game
 
-      - name: Upload executable and lockfile
+      - name: Package executable with GPU shader assets
+        shell: cmd
+        run: |
+          if not exist "target\release\sandbox-game.exe" exit /b 1
+          if not exist "assets\shaders\compute_mesh.wesl" exit /b 1
+          if exist "dist\b0" rmdir /s /q "dist\b0"
+          mkdir "dist\b0\assets\shaders"
+          if errorlevel 1 exit /b 1
+          copy /Y "target\release\sandbox-game.exe" "dist\b0\sandbox-game.exe"
+          if errorlevel 1 exit /b 1
+          copy /Y "assets\shaders\compute_mesh.wesl" "dist\b0\assets\shaders\compute_mesh.wesl"
+          if errorlevel 1 exit /b 1
+          copy /Y "Cargo.lock" "dist\b0\Cargo.lock"
+          if errorlevel 1 exit /b 1
+          if not exist "dist\b0\sandbox-game.exe" exit /b 1
+          if not exist "dist\b0\assets\shaders\compute_mesh.wesl" exit /b 1
+
+      - name: Upload standalone Windows release
         uses: actions/upload-artifact@v4
         with:
           name: b0-windows-org-runner-release
-          path: |
-            target/release/sandbox-game.exe
-            Cargo.lock
+          path: dist/b0/
           if-no-files-found: error

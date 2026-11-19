@@ -1,6 +1,6 @@
 # Sandbox V2 — MVP B | Rust + Bevy + GPU Compute
 
-**Estado:** B0 implementada na branch `feat/b0-rust-bevy-gpu-bootstrap-20261118`, pendente de CI e validação gráfica. B1–B7 não iniciadas.
+**Estado:** B0 compilação, testes automatizados e prova visual GPU aprovados (19/11/2026). Empacotamento do shader corrigido; nova verificação CI pendente. B1–B7 não iniciadas.
 
 ## Objetivo
 
@@ -44,7 +44,7 @@ O benchmark será medido no renderizador real, não apenas em tarefas de computa
 
 ## Execução
 
-A B0 já possui código e workflow Windows; compilação e renderização ainda precisam ser verificadas.
+A B0 compilou e apresentou os dois cubos GPU no Windows/Vulkan. Para executar o artefato baixado do Actions, extraia-o preservando `assets/shaders/compute_mesh.wesl` e abra o terminal na raiz extraída antes de executar `./sandbox-game.exe`.
 
 ```powershell
 git fetch origin
@@ -52,4 +52,4 @@ git switch feat/b0-rust-bevy-gpu-bootstrap-20261118
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-b0.ps1
 ```
 
-A janela B0 mostra cubos gerados por compute shader em GPU, câmera com teclas WASD/Q/E (18 m/s), e métricas preliminares do Bevy. **Não** inclui terreno SDF, horizonte 130 m, streaming nem métricas completas de apresentação. O workflow Windows gera o `Cargo.lock` inicial; o lock deve ser commitado antes de integrar à `main`.
+A janela B0 mostra cubos gerados por compute shader em GPU, câmera com teclas WASD/Q/E (18 m/s), e métricas preliminares do Bevy. **Não** inclui terreno SDF, horizonte 130 m, streaming nem métricas completas de apresentação. O `Cargo.lock` já está versionado; o workflow compila usando `--locked`.
