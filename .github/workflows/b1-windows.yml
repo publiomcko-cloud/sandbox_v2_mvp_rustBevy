@@ -54,6 +54,10 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Rustfmt
+        shell: cmd
+        run: cargo fmt --all -- --check
+
       - name: Check MSVC C++ linker availability
         shell: cmd
         run: |
@@ -62,10 +66,6 @@ jobs:
             echo ERROR: Install Visual Studio Build Tools with Desktop development with C++ and Windows SDK on this runner.
             exit /b 1
           )
-
-      - name: Rustfmt
-        shell: cmd
-        run: cargo fmt --all -- --check
 
       - name: B1 CPU SDF numerical and cave tests
         shell: cmd
