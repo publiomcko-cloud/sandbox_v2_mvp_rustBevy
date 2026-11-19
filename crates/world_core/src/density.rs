@@ -278,6 +278,19 @@ mod tests {
     }
 
     #[test]
+    fn density_wgsl_module_parses_and_validates() {
+        let shader = include_str!("../../../assets/shaders/sdf_density.wgsl");
+        let module = naga::front::wgsl::parse_str(shader)
+            .unwrap_or_else(|error| panic!("{}", error.emit_to_string(shader)));
+        let mut validator = naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        );
+        validator.validate(&module).expect("WGSL validation failed");
+        assert!(module.entry_points.iter().any(|entry| entry.name == "main"));
+    }
+
+    #[test]
     fn shader_uniform_layout_stable() {
         let g = DensityGrid::new(coord(-1, 2, -3), 2).unwrap();
         assert_eq!(
