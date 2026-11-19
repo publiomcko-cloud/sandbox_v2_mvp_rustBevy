@@ -5312,6 +5312,9 @@ name = "sandbox-gpu-terrain"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "naga",
+ "sandbox-world-core",
+ "wgpu",
 ]
 
 [[package]]

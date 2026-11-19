@@ -10,3 +10,8 @@ bevy.workspace = true
 
 [lib]
 name = "sandbox_gpu_terrain"
+
+[dev-dependencies]
+naga = { version = "=30.0.2", features = ["wgsl-in"] }
+wgpu = "=30.0.2"
+sandbox-world-core = { path = "../world_core" }
