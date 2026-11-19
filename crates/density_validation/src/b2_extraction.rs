@@ -59,9 +59,62 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
         compilation_options: Default::default(),
         cache: None,
     });
+    // Exercise the same explicit four-binding layout as the Bevy B2 runtime.
+    // Auto-inferred per-entry-point layouts would miss this class of bug.
+    let surface_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("B2 shared Surface Nets layout regression"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+    let surface_pipeline_layout =
+        device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("B2 shared Surface Nets pipeline layout regression"),
+            bind_group_layouts: &[Some(&surface_layout)],
+            immediate_size: 0,
+        });
     let vertices_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("B2 vertex compute pipeline"),
-        layout: None,
+        layout: Some(&surface_pipeline_layout),
         module: &extract_shader,
         entry_point: Some("emit_vertices"),
         compilation_options: Default::default(),
@@ -69,7 +122,7 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
     });
     let indices_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("B2 index compute pipeline"),
-        layout: None,
+        layout: Some(&surface_pipeline_layout),
         module: &extract_shader,
         entry_point: Some("emit_indices"),
         compilation_options: Default::default(),
@@ -157,13 +210,11 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                 },
             ],
         });
-        // Auto-derived pipeline layouts contain only bindings actually
-        // referenced by each entry point. Vertex stage uses 0/1/2;
-        // index stage uses 0/1/3 (binding 2 is intentionally absent).
-        // Runtime B2 uses an explicit shared four-slot layout instead.
-        let vertex_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("B2 vertices group"),
-            layout: &vertices_pipeline.get_bind_group_layout(0),
+        // One explicit four-slot bind group is shared by both entry points,
+        // including the unused slot for each individual compute stage.
+        let surface_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("B2 shared Surface Nets group"),
+            layout: &surface_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -176,20 +227,6 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: vertices.as_entire_binding(),
-                },
-            ],
-        });
-        let index_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("B2 indices group"),
-            layout: &indices_pipeline.get_bind_group_layout(0),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: density.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -215,7 +252,7 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&vertices_pipeline);
-            pass.set_bind_group(0, &vertex_group, &[]);
+            pass.set_bind_group(0, &surface_group, &[]);
             pass.dispatch_workgroups(count.div_ceil(64), 1, 1);
         }
         {
@@ -224,7 +261,7 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&indices_pipeline);
-            pass.set_bind_group(0, &index_group, &[]);
+            pass.set_bind_group(0, &surface_group, &[]);
             pass.dispatch_workgroups((3 * count).div_ceil(64), 1, 1);
         }
         encoder.copy_buffer_to_buffer(&vertices, 0, &v_staging, 0, vertices_bytes);
