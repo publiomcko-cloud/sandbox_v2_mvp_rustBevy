@@ -41,9 +41,9 @@ fn block_on<T>(future: impl Future<Output = T>) -> T {
 fn gpu_samples(grid: DensityGrid, seed: u32) -> Result<Vec<f32>, String> {
     use wgpu::util::DeviceExt;
 
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
-        ..Default::default()
+        ..wgpu::InstanceDescriptor::new_without_display_handle()
     });
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
@@ -148,7 +148,9 @@ fn gpu_samples(grid: DensityGrid, seed: u32) -> Result<Vec<f32>, String> {
         .map_err(|e| format!("GPU readback callback missing: {e}"))?
         .map_err(|e| format!("GPU readback failed: {e}"))?;
 
-    let mapping = staging.get_mapped_range();
+    let mapping = staging
+        .get_mapped_range(..)
+        .map_err(|e| format!("GPU mapped range failed: {e}"))?;
     let out: Vec<f32> = mapping
         .chunks_exact(4)
         .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
