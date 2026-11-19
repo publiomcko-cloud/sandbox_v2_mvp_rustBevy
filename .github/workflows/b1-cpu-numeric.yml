@@ -21,5 +21,9 @@ jobs:
           rustup default 1.100.0
       - name: Rustfmt
         run: cargo fmt --all -- --check
+      - name: Reconcile workspace lock dependencies
+        run: |
+          cargo update --workspace
+          git diff -- Cargo.lock
       - name: Deterministic SDF and caves
         run: cargo test -p sandbox-world-core --locked -- --nocapture
