@@ -34,18 +34,29 @@ impl DensityGrid {
         let step_half = 1_i32 << lod;
         let mut base_half = [0_i32; 3];
         for (index, block) in [coord.x, coord.y, coord.z].into_iter().enumerate() {
-            let base = block.checked_mul(BLOCK_EDGE_METERS)
+            let base = block
+                .checked_mul(BLOCK_EDGE_METERS)
                 .and_then(|n| n.checked_mul(2))
                 .ok_or(DensityError::CoordinateOutOfRange)?;
-            let lower = base.checked_sub(step_half as i64)
+            let lower = base
+                .checked_sub(step_half as i64)
                 .ok_or(DensityError::CoordinateOutOfRange)?;
-            let upper = base.checked_add((cells as i64 + 1) * step_half as i64)
+            let upper = base
+                .checked_add((cells as i64 + 1) * step_half as i64)
                 .ok_or(DensityError::CoordinateOutOfRange)?;
             i32::try_from(lower).map_err(|_| DensityError::CoordinateOutOfRange)?;
             i32::try_from(upper).map_err(|_| DensityError::CoordinateOutOfRange)?;
-            base_half[index] = i32::try_from(base).map_err(|_| DensityError::CoordinateOutOfRange)?;
+            base_half[index] =
+                i32::try_from(base).map_err(|_| DensityError::CoordinateOutOfRange)?;
         }
-        Ok(Self { coord, lod, cells, dim, step_half, base_half })
+        Ok(Self {
+            coord,
+            lod,
+            cells,
+            dim,
+            step_half,
+            base_half,
+        })
     }
 
     pub fn len(self) -> usize {
@@ -53,8 +64,7 @@ impl DensityGrid {
     }
 
     pub fn offset(self, x: usize, y: usize, z: usize) -> Option<usize> {
-        (x < self.dim && y < self.dim && z < self.dim)
-            .then_some((z * self.dim + y) * self.dim + x)
+        (x < self.dim && y < self.dim && z < self.dim).then_some((z * self.dim + y) * self.dim + x)
     }
 
     pub fn half_position(self, x: usize, y: usize, z: usize) -> Option<[i32; 3]> {
@@ -68,9 +78,16 @@ impl DensityGrid {
     /// 32-byte shader uniform: three i32 origins, u32 seed, i32 step,
     /// u32 dimension, u32 count and u32 padding.
     pub fn uniform_words(self, seed: u32) -> [u32; 8] {
-        [self.base_half[0] as u32, self.base_half[1] as u32,
-         self.base_half[2] as u32, seed, self.step_half as u32,
-         self.dim as u32, self.len() as u32, 0]
+        [
+            self.base_half[0] as u32,
+            self.base_half[1] as u32,
+            self.base_half[2] as u32,
+            seed,
+            self.step_half as u32,
+            self.dim as u32,
+            self.len() as u32,
+            0,
+        ]
     }
 }
 
@@ -94,7 +111,11 @@ impl DensityBlock {
                 }
             }
         }
-        Ok(Self { grid, seed, samples })
+        Ok(Self {
+            grid,
+            seed,
+            samples,
+        })
     }
 
     pub fn get(&self, x: usize, y: usize, z: usize) -> Option<f32> {
@@ -103,8 +124,7 @@ impl DensityBlock {
 }
 
 pub fn hash2(seed: u32, x: i32, z: i32) -> u32 {
-    let mut h = seed ^ (x as u32).wrapping_mul(0x9e37_79b1)
-        ^ (z as u32).wrapping_mul(0x85eb_ca77);
+    let mut h = seed ^ (x as u32).wrapping_mul(0x9e37_79b1) ^ (z as u32).wrapping_mul(0x85eb_ca77);
     h ^= h >> 16;
     h = h.wrapping_mul(0x7feb_352d);
     h ^= h >> 15;
@@ -186,7 +206,8 @@ mod tests {
             for axis in 0..3 {
                 let mut next = [-1_i64; 3];
                 next[axis] += 1;
-                let b = DensityBlock::generate(1234, coord(next[0], next[1], next[2]), lod).unwrap();
+                let b =
+                    DensityBlock::generate(1234, coord(next[0], next[1], next[2]), lod).unwrap();
                 for j in [0, a.grid.dim / 2, a.grid.dim - 1] {
                     for k in [0, a.grid.dim / 2, a.grid.dim - 1] {
                         let (a_pos, b_pos) = match axis {
@@ -194,8 +215,10 @@ mod tests {
                             1 => ([j, edge, k], [j, HALO, k]),
                             _ => ([j, k, edge], [j, k, HALO]),
                         };
-                        assert_eq!(a.get(a_pos[0], a_pos[1], a_pos[2]),
-                                   b.get(b_pos[0], b_pos[1], b_pos[2]));
+                        assert_eq!(
+                            a.get(a_pos[0], a_pos[1], a_pos[2]),
+                            b.get(b_pos[0], b_pos[1], b_pos[2])
+                        );
                     }
                 }
             }
@@ -244,15 +267,22 @@ mod tests {
 
     #[test]
     fn unsupported_lod_and_integer_overflow_rejected() {
-        assert_eq!(DensityGrid::new(coord(0, 0, 0), 3), Err(DensityError::InvalidLod(3)));
-        assert_eq!(DensityGrid::new(coord(i64::MAX, 0, 0), 0),
-                   Err(DensityError::CoordinateOutOfRange));
+        assert_eq!(
+            DensityGrid::new(coord(0, 0, 0), 3),
+            Err(DensityError::InvalidLod(3))
+        );
+        assert_eq!(
+            DensityGrid::new(coord(i64::MAX, 0, 0), 0),
+            Err(DensityError::CoordinateOutOfRange)
+        );
     }
 
     #[test]
     fn shader_uniform_layout_stable() {
         let g = DensityGrid::new(coord(-1, 2, -3), 2).unwrap();
-        assert_eq!(g.uniform_words(99),
-                   [(-32_i32) as u32, 64, (-96_i32) as u32, 99, 4, 11, 1331, 0]);
+        assert_eq!(
+            g.uniform_words(99),
+            [(-32_i32) as u32, 64, (-96_i32) as u32, 99, 4, 11, 1331, 0]
+        );
     }
 }
