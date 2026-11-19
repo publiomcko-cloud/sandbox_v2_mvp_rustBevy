@@ -36,8 +36,12 @@ jobs:
       - name: Release build regression
         shell: pwsh
         run: cargo build --release --locked -p sandbox-game
-      - name: Verify B0 shader release packaging
+      - name: Verify B0 executable and GPU shader are present
         shell: pwsh
         run: |
-          Test-Path "target/release/sandbox-game.exe" | Should -BeTrue
-          Test-Path "assets/shaders/compute_mesh.wesl" | Should -BeTrue
+          if (-not (Test-Path "target/release/sandbox-game.exe")) {
+            throw "Missing Windows release executable"
+          }
+          if (-not (Test-Path "assets/shaders/compute_mesh.wesl")) {
+            throw "Missing B0 compute shader asset"
+          }
