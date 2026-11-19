@@ -65,3 +65,15 @@ Commands:
 
     cargo test -p sandbox-density-gpu-validation --locked b1_shader_is_valid_wgsl_and_has_expected_entry_point
     cargo test -p sandbox-density-gpu-validation --locked b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture
+
+
+## Dedicated GPU runner label
+
+The organization has at least two Windows runners. Generic Windows jobs can land on
+`DESKTOP-T0U6S55`, which currently does not have the MSVC `link.exe` toolchain.
+For reliable and reproducible real GPU parity, the B1 Windows workflow now
+requires the custom label `b1-vulkan-gpu` in addition to the default Windows
+labels. Assign this custom label only to the Windows machine that has a Vulkan GPU
+and functioning Visual Studio C++ Build Tools (currently the previously qualified
+`DESKTOP-SAFGO15`). Until the label is assigned, the GPU job will correctly
+remain queued instead of producing a misleading failure on a nonqualified runner.
