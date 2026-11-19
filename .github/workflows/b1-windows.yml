@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: [self-hosted, Windows, X64]
+    # This job needs a real Vulkan GPU and working MSVC toolchain.
+    # Label only qualified GPU hosts; generic Windows runners may lack the linker.
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
     env:
       CARGO_BUILD_JOBS: '1'
       CARGO_PROFILE_TEST_DEBUG: '0'
