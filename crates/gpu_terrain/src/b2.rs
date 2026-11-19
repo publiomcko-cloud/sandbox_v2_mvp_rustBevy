@@ -113,18 +113,9 @@ fn setup_b2_scene(
                     PrimitiveTopology::TriangleList,
                     RenderAssetUsages::RENDER_WORLD,
                 )
-                .with_inserted_attribute(
-                    Mesh::ATTRIBUTE_POSITION,
-                    vec![[0.0_f32; 3]; vertices],
-                )
-                .with_inserted_attribute(
-                    Mesh::ATTRIBUTE_NORMAL,
-                    vec![[0.0_f32; 3]; vertices],
-                )
-                .with_inserted_attribute(
-                    Mesh::ATTRIBUTE_UV_0,
-                    vec![[0.0_f32; 2]; vertices],
-                )
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0_f32; 3]; vertices])
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0_f32; 3]; vertices])
+                .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0_f32; 2]; vertices])
                 .with_inserted_indices(Indices::U32(vec![0_u32; indices]));
                 mesh.asset_usage = RenderAssetUsages::RENDER_WORLD;
                 let handle = meshes.add(mesh);
@@ -139,11 +130,7 @@ fn setup_b2_scene(
                     // AABB computed from zero-valued placeholder vertices
                     // is NOT the actual eventual GPU surface bounds.
                     NoFrustumCulling,
-                    Transform::from_xyz(
-                        bx as f32 * 16.0,
-                        by as f32 * 16.0,
-                        bz as f32 * 16.0,
-                    ),
+                    Transform::from_xyz(bx as f32 * 16.0, by as f32 * 16.0, bz as f32 * 16.0),
                 ));
             }
         }
@@ -155,21 +142,14 @@ fn setup_b2_scene(
             shadows_enabled: false,
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(
-            EulerRot::XYZ,
-            -0.8,
-            0.6,
-            0.0,
-        )),
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.8, 0.6, 0.0)),
     ));
     commands.spawn((
         Camera3d::default(),
         if cave_scene {
-            Transform::from_xyz(7.0, -7.0, -6.0)
-                .looking_at(Vec3::new(-12.0, -7.0, -6.0), Vec3::Y)
+            Transform::from_xyz(7.0, -7.0, -6.0).looking_at(Vec3::new(-12.0, -7.0, -6.0), Vec3::Y)
         } else {
-            Transform::from_xyz(-27.0, 20.0, 34.0)
-                .looking_at(Vec3::new(-7.0, 2.0, -7.0), Vec3::Y)
+            Transform::from_xyz(-27.0, 20.0, 34.0).looking_at(Vec3::new(-7.0, 2.0, -7.0), Vec3::Y)
         },
     ));
     info!("B2 static GPU terrain initialized (8 blocks, LOD {lod}, seed {SEED})");
@@ -214,11 +194,7 @@ struct B2Params {
     padding2: u32,
 }
 
-fn init_b2_pipelines(
-    mut commands: Commands,
-    assets: Res<AssetServer>,
-    cache: Res<PipelineCache>,
-) {
+fn init_b2_pipelines(mut commands: Commands, assets: Res<AssetServer>, cache: Res<PipelineCache>) {
     let density_layout = BindGroupLayoutDescriptor::new(
         "B2 density layout",
         &BindGroupLayoutEntries::sequential(
@@ -367,10 +343,7 @@ fn compute_b2(
         let density_group = context.render_device().create_bind_group(
             None,
             &cache.get_bind_group_layout(&pipelines.density_layout),
-            &BindGroupEntries::sequential((
-                &uniform,
-                density_buffer.as_entire_buffer_binding(),
-            )),
+            &BindGroupEntries::sequential((&uniform, density_buffer.as_entire_buffer_binding())),
         );
         let surface_group = context.render_device().create_bind_group(
             None,

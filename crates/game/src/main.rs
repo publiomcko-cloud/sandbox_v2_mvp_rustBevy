@@ -7,8 +7,7 @@ use bevy::prelude::*;
 use sandbox_gpu_terrain::{GpuTerrainBootstrapPlugin, b2::GpuTerrainB2Plugin};
 
 fn main() {
-    let b0 = std::env::var("SANDBOX_STAGE")
-        .is_ok_and(|value| value.eq_ignore_ascii_case("B0"));
+    let b0 = std::env::var("SANDBOX_STAGE").is_ok_and(|value| value.eq_ignore_ascii_case("B0"));
     let title = if b0 {
         "Sandbox V2 - Rust/Bevy B0 GPU bootstrap"
     } else {
