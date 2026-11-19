@@ -1,0 +1,25 @@
+name: B1 CPU numeric cross-platform gate
+
+on:
+  push:
+    branches:
+      - 'feat/b1-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-sdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+          rustup default 1.100.0
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+      - name: Deterministic SDF and caves
+        run: cargo test -p sandbox-world-core --locked -- --nocapture
