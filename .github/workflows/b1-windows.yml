@@ -19,7 +19,8 @@ jobs:
   windows:
     runs-on: [self-hosted, Windows, X64]
     env:
-      CARGO_BUILD_JOBS: '2'
+      CARGO_BUILD_JOBS: '1'
+      CARGO_PROFILE_TEST_DEBUG: '0'
       CARGO_INCREMENTAL: '0'
     timeout-minutes: 120
     steps:
@@ -64,18 +65,10 @@ jobs:
 
       - name: B1 shader WGSL parser and validator
         shell: cmd
-        run: cargo test --locked -p sandbox-gpu-terrain b1_shader_is_valid_wgsl_and_has_expected_entry_point -- --nocapture
-
-      - name: Full workspace regression
-        shell: cmd
-        run: cargo test --workspace --locked
+        run: cargo test --locked -p sandbox-density-gpu-validation b1_shader_is_valid_wgsl_and_has_expected_entry_point -- --nocapture
 
       - name: Real GPU versus CPU density parity
         shell: cmd
         env:
           WGPU_BACKEND: vulkan
-        run: cargo test --locked -p sandbox-gpu-terrain b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture
-
-      - name: Release regression
-        shell: cmd
-        run: cargo build --release --locked -p sandbox-game
+        run: cargo test --locked -p sandbox-density-gpu-validation b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture

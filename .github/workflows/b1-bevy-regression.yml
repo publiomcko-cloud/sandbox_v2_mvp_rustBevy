@@ -1,0 +1,43 @@
+name: B1 Bevy Windows regression (hosted)
+
+on:
+  push:
+    branches:
+      - 'feat/b1-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b1-bevy-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bevy-regression:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+          rustc --version
+      - name: Workspace format
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: All workspace tests (GPU parity remains opt-in on hardware runner)
+        shell: pwsh
+        run: cargo test --workspace --locked
+      - name: Release build regression
+        shell: pwsh
+        run: cargo build --release --locked -p sandbox-game
+      - name: Verify B0 shader release packaging
+        shell: pwsh
+        run: |
+          Test-Path "target/release/sandbox-game.exe" | Should -BeTrue
+          Test-Path "assets/shaders/compute_mesh.wesl" | Should -BeTrue

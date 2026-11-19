@@ -11,8 +11,6 @@
 
 use std::ops::Not;
 
-#[cfg(test)]
-mod b1_validation;
 
 use bevy::{
     asset::RenderAssetUsages,

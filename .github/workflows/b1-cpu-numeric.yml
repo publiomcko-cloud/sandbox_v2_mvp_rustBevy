@@ -23,3 +23,5 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Deterministic SDF and caves
         run: cargo test -p sandbox-world-core --locked -- --nocapture
+      - name: Compile lightweight wgpu test harness and validate WGSL
+        run: cargo test -p sandbox-density-gpu-validation --locked b1_shader_is_valid_wgsl_and_has_expected_entry_point -- --nocapture

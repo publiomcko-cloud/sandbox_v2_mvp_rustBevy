@@ -4,6 +4,7 @@ members = [
     "crates/world_core",
     "crates/streaming",
     "crates/gpu_terrain",
+    "crates/density_validation",
     "crates/game",
 ]
 

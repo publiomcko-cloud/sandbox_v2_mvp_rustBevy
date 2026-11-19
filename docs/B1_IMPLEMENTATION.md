@@ -36,11 +36,32 @@ To run CPU numeric gates (Rust 1.100 / MSVC tools):
 
 To validate shader without a GPU:
 
-    cargo test --locked -p sandbox-gpu-terrain b1_shader_is_valid_wgsl_and_has_expected_entry_point
+    cargo test --locked -p sandbox-density-gpu-validation b1_shader_is_valid_wgsl_and_has_expected_entry_point
 
 To run actual GPU parity on a machine with Vulkan:
 
     set WGPU_BACKEND=vulkan
-    cargo test --locked -p sandbox-gpu-terrain b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture
+    cargo test --locked -p sandbox-density-gpu-validation b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture
 
 The B1 GitHub Actions workflow executes all of these checks and the complete workspace regression.
+
+
+## Memory-aware validation separation (2026-11-19)
+
+The original Windows B1 CI passed all ten CPU tests, then failed while compiling
+Bevy dependencies for the shader test: `rustc-LLVM ERROR: out of memory`
+(`bevy_reflect`, followed by a `windows` allocation failure). The GPU
+parity test had not started. This was NOT a measured CPU/GPU density mismatch.
+
+The Naga/wgpu test harness now lives in the standalone
+`sandbox-density-gpu-validation` package. It has **no Bevy dependency**.
+The self-hosted Windows CI compiles this lightweight package with one Cargo
+job and debug symbols disabled, and then requires a real Vulkan GPU adapter
+for parity. Independently, `b1-bevy-regression.yml` tests the full Bevy
+workspace on hosted Windows hardware. No true B1 acceptance is claimed until
+all gates pass.
+
+Commands:
+
+    cargo test -p sandbox-density-gpu-validation --locked b1_shader_is_valid_wgsl_and_has_expected_entry_point
+    cargo test -p sandbox-density-gpu-validation --locked b1_cpu_gpu_density_parity_lod_seed_negative_coordinates_and_cave -- --ignored --nocapture
