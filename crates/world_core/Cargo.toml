@@ -7,3 +7,6 @@ license.workspace = true
 
 [lib]
 name = "sandbox_world_core"
+
+[dev-dependencies]
+naga = { version = "=30.0.2", features = ["wgsl-in"] }

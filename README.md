@@ -1,6 +1,6 @@
 # Sandbox V2 — MVP B | Rust + Bevy + GPU Compute
 
-**Estado:** B0 compilação, testes automatizados e prova visual GPU aprovados (19/11/2026). Empacotamento do shader corrigido; nova verificação CI pendente. B1–B7 não iniciadas.
+**Estado:** B0 compilação/testes e prova visual GPU aprovados; ajuste do pacote aguarda revalidação no CI. B1 SDF+WGSL implementada em `feat/b1-sdf-density-20261119`, aguardando validação numérica real CPU/GPU. B2–B7 não iniciadas.
 
 ## Objetivo
 
@@ -25,6 +25,8 @@ Validar do zero um sandbox 3D de terreno volumétrico SDF editável, cavernas, s
 | Persistência | Restaurar terreno editado e estados alterados dos objetos |
 
 O benchmark será medido no renderizador real, não apenas em tarefas de computação GPU ou testes headless.
+
+- [B1: SDF determinístico, WGSL e testes de paridade](docs/B1_IMPLEMENTATION.md)
 
 ## Documentação
 

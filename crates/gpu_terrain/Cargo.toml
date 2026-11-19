@@ -10,3 +10,4 @@ bevy.workspace = true
 
 [lib]
 name = "sandbox_gpu_terrain"
+

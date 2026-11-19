@@ -2,6 +2,8 @@
 
 pub const BLOCK_EDGE_METERS: i64 = 16;
 
+pub mod density;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct BlockCoord {
     pub x: i64,

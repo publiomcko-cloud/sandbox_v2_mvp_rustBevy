@@ -1,0 +1,11 @@
+[package]
+name = "sandbox-density-gpu-validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dev-dependencies]
+naga = { version = "=30.0.2", features = ["wgsl-in"] }
+wgpu = "=30.0.2"
+sandbox-world-core = { path = "../world_core" }
