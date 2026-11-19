@@ -1,0 +1,23 @@
+name: B1 Vulkan runner label diagnostic
+
+on:
+  push:
+    branches:
+      - diag/b1-vulkan-label-matching-20261119
+
+permissions:
+  contents: read
+
+jobs:
+  identify:
+    name: Check custom GPU label dispatch
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 5
+    steps:
+      - name: Identify runner
+        shell: cmd
+        run: |
+          echo RUNNER_NAME=%RUNNER_NAME%
+          echo COMPUTERNAME=%COMPUTERNAME%
+          echo RUNNER_OS=%RUNNER_OS%
+          echo RUNNER_ARCH=%RUNNER_ARCH%
