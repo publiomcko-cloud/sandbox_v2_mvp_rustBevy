@@ -11,7 +11,6 @@
 
 use std::ops::Not;
 
-
 use bevy::{
     asset::RenderAssetUsages,
     color::palettes::tailwind::{RED_400, SKY_400},

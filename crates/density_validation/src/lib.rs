@@ -51,9 +51,18 @@ fn gpu_samples(grid: DensityGrid, seed: u32) -> Result<Vec<f32>, String> {
     }))
     .map_err(|e| format!("GPU adapter unavailable: {e}"))?;
     let info = adapter.get_info();
-    println!("B1 selected Vulkan adapter: {} ({:?})", info.name, info.device_type);
-    if !matches!(info.device_type, wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu) {
-        return Err(format!("B1 real GPU parity requires hardware Vulkan adapter, got {:?}", info.device_type));
+    println!(
+        "B1 selected Vulkan adapter: {} ({:?})",
+        info.name, info.device_type
+    );
+    if !matches!(
+        info.device_type,
+        wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu
+    ) {
+        return Err(format!(
+            "B1 real GPU parity requires hardware Vulkan adapter, got {:?}",
+            info.device_type
+        ));
     }
     let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
         .map_err(|e| format!("GPU device unavailable: {e}"))?;
