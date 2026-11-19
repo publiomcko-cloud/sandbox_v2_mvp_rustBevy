@@ -26,7 +26,7 @@ fn hash2(seed: u32, x: i32, z: i32) -> u32 {
 fn hash01(seed: u32, x: i32, z: i32) -> f32 {
     return f32(hash2(seed, x, z) & 1023u) * (1.0 / 1023.0);
 }
-fn smooth(t: f32) -> f32 {
+fn smooth_curve(t: f32) -> f32 {
     return t * t * (3.0 - 2.0 * t);
 }
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
@@ -43,8 +43,8 @@ fn floor_div(a: i32, divisor: i32) -> i32 {
 fn noise2_half(seed: u32, hx: i32, hz: i32, scale: i32) -> f32 {
     let gx = floor_div(hx, scale);
     let gz = floor_div(hz, scale);
-    let tx = smooth(f32(hx - gx * scale) / f32(scale));
-    let tz = smooth(f32(hz - gz * scale) / f32(scale));
+    let tx = smooth_curve(f32(hx - gx * scale) / f32(scale));
+    let tz = smooth_curve(f32(hz - gz * scale) / f32(scale));
     let a = lerp(hash01(seed, gx, gz), hash01(seed, gx + 1, gz), tx);
     let b = lerp(hash01(seed, gx, gz + 1), hash01(seed, gx + 1, gz + 1), tx);
     return lerp(a, b, tz);
