@@ -1,0 +1,47 @@
+name: B2 visual-only quick retry (reuse existing release)
+
+on:
+  push:
+    branches:
+      - 'diag/b2-visual-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: b2-visual-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    name: Download prebuilt B2 and capture GPU frames (no compilation)
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch already compiled Windows Release from successful job
+        uses: actions/download-artifact@v4
+        with:
+          name: b2-windows-gpu-resident
+          path: b2-runtime
+          repository: ${{ github.repository }}
+          run-id: 44734568472
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Identify PowerShell and session
+        shell: cmd
+        run: |
+          echo Runner=%RUNNER_NAME% Computer=%COMPUTERNAME% Session=%SESSIONNAME%
+          where powershell.exe
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$PSVersionTable.PSVersion.ToString()"
+      - name: Launch existing build and capture surface and cave frames
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\scripts\capture-b2-ci.ps1"
+      - name: Upload diagnostics and frames even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b2-visual-report-only
+          path: b2-visual-report/
+          if-no-files-found: warn
