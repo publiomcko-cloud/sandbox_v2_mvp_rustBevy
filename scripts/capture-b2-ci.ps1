@@ -34,12 +34,40 @@ foreach ($scene in @('surface', 'cave')) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         } else {
             $process.Refresh()
-            if ($process.ExitCode -ne 0) {
-                $problems += "$scene : game exited with code $($process.ExitCode)"
+            # On Windows PowerShell 5.1, Start-Process -PassThru
+            # may expose $null for ExitCode after process termination.
+            # Null is UNKNOWN, never a nonzero failure.
+            $code = $null
+            try { $code = $process.ExitCode } catch { }
+            if ($null -ne $code) {
+                Write-Host "B2 visual exit code for $scene : $code"
+                if ([int]$code -ne 0) {
+                    $problems += "$scene : game exited with code $code"
+                }
+            } else {
+                Write-Host "B2 visual: PowerShell returned no exit code for $scene; verifying PNG and GPU logs"
             }
         }
         $picture = $env:SANDBOX_B2_CAPTURE_PATH
         if ((Test-Path $picture) -and ((Get-Item $picture).Length -gt 2000)) {
+            try {
+                Add-Type -AssemblyName System.Drawing
+                $bitmap = [System.Drawing.Bitmap]::FromFile($picture)
+                try {
+                    if ($bitmap.Width -ne 1280 -or $bitmap.Height -ne 720) {
+                        $problems += "$scene : unexpected PNG size $($bitmap.Width)x$($bitmap.Height)"
+                    }
+                } finally { $bitmap.Dispose() }
+            } catch {
+                $problems += "$scene : invalid PNG: $_"
+            }
+            $logContent = Get-Content -LiteralPath $stderr -Raw
+            if ($logContent -notmatch 'Screenshot saved to' -or $logContent -notmatch 'B2 GPU density/extraction dispatched') {
+                $problems += "$scene : PNG exists but GPU render completion logs are missing"
+            }
+            if ($logContent -match '(?m)\bERROR\b|Validation Error|panic') {
+                $problems += "$scene : GPU runtime log contains an error"
+            }
             Write-Host "B2 visual PNG captured: $picture"
         } else {
             $problems += "$scene : Bevy GPU frame screenshot unavailable"
