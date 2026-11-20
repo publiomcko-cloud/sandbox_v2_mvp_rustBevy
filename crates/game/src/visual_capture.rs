@@ -5,8 +5,8 @@ use bevy::{
     prelude::*,
     render::view::screenshot::{Screenshot, save_to_disk},
 };
-use std::path::PathBuf;
 use sandbox_gpu_terrain::b2::B2HeadlessTarget;
+use std::path::PathBuf;
 
 #[derive(Resource)]
 struct VisualCaptureState {
