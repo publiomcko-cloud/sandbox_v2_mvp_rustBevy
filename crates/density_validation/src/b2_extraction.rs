@@ -354,34 +354,62 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
             _ => (0, 0, -1),
         };
         let neighbor = output.get(&coord).unwrap();
-        let neighbor_origin = [coord.0 as f32 * 16.0, coord.1 as f32 * 16.0,
-            coord.2 as f32 * 16.0];
+        let neighbor_origin = [
+            coord.0 as f32 * 16.0,
+            coord.1 as f32 * 16.0,
+            coord.2 as f32 * 16.0,
+        ];
         let slot = |p: [usize; 3]| ((p[2] * vd + p[1]) * vd + p[0]) * 8;
         for v in 0..vd {
             for u in 0..vd {
                 let mut a = [0usize; 3];
                 let mut b = [0usize; 3];
                 match axis {
-                    0 => { a[1] = u; a[2] = v; b[0] = cells; b[1] = u; b[2] = v; }
-                    1 => { a[0] = u; a[2] = v; b[0] = u; b[1] = cells; b[2] = v; }
-                    _ => { a[0] = u; a[1] = v; b[0] = u; b[1] = v; b[2] = cells; }
+                    0 => {
+                        a[1] = u;
+                        a[2] = v;
+                        b[0] = cells;
+                        b[1] = u;
+                        b[2] = v;
+                    }
+                    1 => {
+                        a[0] = u;
+                        a[2] = v;
+                        b[0] = u;
+                        b[1] = cells;
+                        b[2] = v;
+                    }
+                    _ => {
+                        a[0] = u;
+                        a[1] = v;
+                        b[0] = u;
+                        b[1] = v;
+                        b[2] = cells;
+                    }
                 };
                 let ia = slot(a);
                 let ib = slot(b);
                 for component in 0..3 {
-                    let delta = (center[ia + component] -
-                        (neighbor[ib + component] + neighbor_origin[component])).abs();
-                    assert!(delta <= 0.0002,
-                        "B2 seam mismatch axis={axis} a={a:?} b={b:?} component={component} error={delta}");
+                    let delta = (center[ia + component]
+                        - (neighbor[ib + component] + neighbor_origin[component]))
+                        .abs();
+                    assert!(
+                        delta <= 0.0002,
+                        "B2 seam mismatch axis={axis} a={a:?} b={b:?} component={component} error={delta}"
+                    );
                 }
                 for component in 3..6 {
-                    let delta = (center[ia + component] -
-                        neighbor[ib + component]).abs();
-                    assert!(delta <= 0.0002,
-                        "B2 seam normal mismatch axis={axis} a={a:?} b={b:?} component={component} error={delta}");
+                    let delta = (center[ia + component] - neighbor[ib + component]).abs();
+                    assert!(
+                        delta <= 0.0002,
+                        "B2 seam normal mismatch axis={axis} a={a:?} b={b:?} component={component} error={delta}"
+                    );
                 }
             }
         }
-        println!("B2 GPU same-LOD seam PASS axis={axis} replicated_cells={}", vd * vd);
+        println!(
+            "B2 GPU same-LOD seam PASS axis={axis} replicated_cells={}",
+            vd * vd
+        );
     }
 }

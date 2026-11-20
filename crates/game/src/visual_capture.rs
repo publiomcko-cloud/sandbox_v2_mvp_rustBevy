@@ -35,7 +35,10 @@ fn capture_frame(
     if !state.issued && elapsed >= 7.0 {
         state.issued = true;
         state.requested_at = elapsed;
-        info!("B2 visual CI: requesting screenshot at {}", state.path.display());
+        info!(
+            "B2 visual CI: requesting screenshot at {}",
+            state.path.display()
+        );
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(state.path.clone()));
@@ -45,7 +48,10 @@ fn capture_frame(
         && elapsed - state.requested_at > 0.3
         && std::fs::metadata(&state.path).is_ok_and(|metadata| metadata.len() > 2000)
     {
-        info!("B2 visual CI: screenshot captured at {}", state.path.display());
+        info!(
+            "B2 visual CI: screenshot captured at {}",
+            state.path.display()
+        );
         exit.write(AppExit::Success);
     }
 
