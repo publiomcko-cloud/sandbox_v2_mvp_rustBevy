@@ -1,5 +1,6 @@
 //! B2 default: GPU-resident SDF terrain; opt in to B0 via SANDBOX_STAGE=B0.
 mod player;
+mod visual_capture;
 
 use avian3d::prelude::PhysicsPlugins;
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
@@ -33,5 +34,6 @@ fn main() {
     } else {
         app.add_plugins(GpuTerrainB2Plugin);
     }
+    visual_capture::configure(&mut app);
     app.add_systems(Update, player::fly_camera).run();
 }
