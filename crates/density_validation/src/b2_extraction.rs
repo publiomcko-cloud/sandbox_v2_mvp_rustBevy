@@ -128,13 +128,19 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
         cache: None,
     });
 
+    let mut output = std::collections::HashMap::new();
     for (coord, lod) in [
         (BlockCoord { x: 0, y: 0, z: 0 }, 2),
+        (BlockCoord { x: -1, y: 0, z: 0 }, 2),
+        (BlockCoord { x: 0, y: -1, z: 0 }, 2),
+        (BlockCoord { x: 0, y: 0, z: -1 }, 2),
         (BlockCoord { x: 0, y: -1, z: -1 }, 2),
     ] {
         let grid = DensityGrid::new(coord, lod).unwrap();
-        let count = grid.cells.pow(3) as u32;
-        let vertices_bytes = count as u64 * 8 * 4;
+        let cells = grid.cells as u32;
+        let count = cells.pow(3);
+        let vertex_count = (cells + 1).pow(3);
+        let vertices_bytes = vertex_count as u64 * 8 * 4;
         let indices_bytes = count as u64 * 18 * 4;
 
         let mut bytes = Vec::with_capacity(64);
@@ -148,7 +154,7 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
             grid.len() as u32,
             0,
             0,
-            count * 8,
+            vertex_count * 8,
             0,
             count * 18,
             grid.cells as u32,
@@ -252,7 +258,7 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
             });
             pass.set_pipeline(&vertices_pipeline);
             pass.set_bind_group(0, &surface_group, &[]);
-            pass.dispatch_workgroups(count.div_ceil(64), 1, 1);
+            pass.dispatch_workgroups(vertex_count.div_ceil(64), 1, 1);
         }
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -303,7 +309,7 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
             "nonfinite vertex data"
         );
         assert!(
-            list.iter().all(|index| *index < count),
+            list.iter().all(|index| *index < vertex_count),
             "out-of-range index"
         );
         let triangles = list
@@ -314,14 +320,68 @@ fn b2_gpu_surface_nets_writes_non_degenerate_indexed_geometry() {
                     && triangle[0] != triangle[2]
             })
             .count();
-        assert!(triangles > 0, "no nondegenerate triangles coord={coord:?}");
+        if coord == (BlockCoord { x: 0, y: 0, z: 0 })
+            || coord == (BlockCoord { x: 0, y: -1, z: -1 })
+        {
+            assert!(triangles > 0, "no nondegenerate triangles coord={coord:?}");
+        }
         println!(
             "B2 Vulkan Surface Nets PASS coord={coord:?} lod={lod} triangles={triangles} vertices={count} index_slots={}",
             list.len()
         );
+        // Preserve the diagnostic readback only in this test, allowing
+        // verification of replicated Surface Nets cells at neighboring
+        // block faces. Production B2 never copies geometry to the CPU.
+        output.insert((coord.x, coord.y, coord.z), values);
         drop(v_mapping);
         drop(i_mapping);
         v_staging.unmap();
         i_staging.unmap();
+    }
+
+    // Compare all replicated cell vertices, not only SDF corner samples.
+    // A local slot 0 on a low boundary is the same world-space cell as
+    // slot 'cells' on the neighboring block's high boundary.
+    let cells = DensityGrid::new(BlockCoord { x: 0, y: 0, z: 0 }, 2)
+        .unwrap()
+        .cells;
+    let vd = cells + 1;
+    let center = output.get(&(0, 0, 0)).unwrap();
+    for axis in 0..3 {
+        let coord = match axis {
+            0 => (-1, 0, 0),
+            1 => (0, -1, 0),
+            _ => (0, 0, -1),
+        };
+        let neighbor = output.get(&coord).unwrap();
+        let neighbor_origin = [coord.0 as f32 * 16.0, coord.1 as f32 * 16.0,
+            coord.2 as f32 * 16.0];
+        let slot = |p: [usize; 3]| ((p[2] * vd + p[1]) * vd + p[0]) * 8;
+        for v in 0..vd {
+            for u in 0..vd {
+                let mut a = [0usize; 3];
+                let mut b = [0usize; 3];
+                match axis {
+                    0 => { a[1] = u; a[2] = v; b[0] = cells; b[1] = u; b[2] = v; }
+                    1 => { a[0] = u; a[2] = v; b[0] = u; b[1] = cells; b[2] = v; }
+                    _ => { a[0] = u; a[1] = v; b[0] = u; b[1] = v; b[2] = cells; }
+                };
+                let ia = slot(a);
+                let ib = slot(b);
+                for component in 0..3 {
+                    let delta = (center[ia + component] -
+                        (neighbor[ib + component] + neighbor_origin[component])).abs();
+                    assert!(delta <= 0.0002,
+                        "B2 seam mismatch axis={axis} a={a:?} b={b:?} component={component} error={delta}");
+                }
+                for component in 3..6 {
+                    let delta = (center[ia + component] -
+                        neighbor[ib + component]).abs();
+                    assert!(delta <= 0.0002,
+                        "B2 seam normal mismatch axis={axis} a={a:?} b={b:?} component={component} error={delta}");
+                }
+            }
+        }
+        println!("B2 GPU same-LOD seam PASS axis={axis} replicated_cells={}", vd * vd);
     }
 }

@@ -2,7 +2,8 @@
 // GPU density is produced by sdf_density.wgsl and remains GPU resident.
 // Each cell owns one vertex; each candidate grid-edge owns six indices.
 // Inactive slots become degenerate triangles; there is no GPU->CPU readback.
-// B3 must add crack-free multi-block/LOD boundaries and compaction/indirect drawing.
+// B2 repairs same-LOD same-seed borders using extended Surface Nets cell vertices.
+// B3 still needs mixed-LOD transitions, compaction and indirect drawing.
 
 struct B2Params {
     base_x: i32,
@@ -39,20 +40,25 @@ fn at(x: u32, y: u32, z: u32) -> f32 {
 }
 
 fn vertex_slot(x: u32, y: u32, z: u32) -> u32 {
-    return (z * p.cells + y) * p.cells + x;
+    let vd = p.cells + 1u;
+    return (z * vd + y) * vd + x;
 }
 
 @compute @workgroup_size(64)
 fn emit_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
     let id = gid.x;
-    let total = p.cells * p.cells * p.cells;
+    // Vertex cells extend one negative-grid cell beyond the owned block.
+    // Shared boundary cells are duplicated at identical SDF coordinates;
+    // edges remain uniquely owned by their global starting grid point.
+    let vd = p.cells + 1u;
+    let total = vd * vd * vd;
     if (id >= total) {
         return;
     }
 
-    let x = id % p.cells;
-    let y = (id / p.cells) % p.cells;
-    let z = id / (p.cells * p.cells);
+    let x = id % vd;
+    let y = (id / vd) % vd;
+    let z = id / (vd * vd);
 
     let vertex_offset = p.vertex_start + id * 8u;
     if (vertex_offset + 8u > p.vertex_end) {
@@ -66,7 +72,7 @@ fn emit_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
         let dx = k & 1u;
         let dy = (k >> 1u) & 1u;
         let dz = (k >> 2u) & 1u;
-        samples[k] = at(x + 1u + dx, y + 1u + dy, z + 1u + dz);
+        samples[k] = at(x + dx, y + dy, z + dz);
     }
 
     var intersection_sum = vec3f(0.0);
@@ -92,7 +98,7 @@ fn emit_vertices(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (intersection_count > 0u) {
         center = intersection_sum / f32(intersection_count);
     }
-    let position = (vec3f(f32(x), f32(y), f32(z)) + center) * spacing;
+    let position = (vec3f(f32(x), f32(y), f32(z)) - vec3f(1.0) + center) * spacing;
 
     // Surface is the zero-set; gradient points to positive (air) density.
     let gradient = vec3f(
@@ -142,12 +148,6 @@ fn emit_indices(@builtin(global_invocation_id) gid: vec3<u32>) {
     let y = (id / p.cells) % p.cells;
     let z = id / (p.cells * p.cells);
 
-    if ((axis == 0u && (y == 0u || z == 0u)) ||
-        (axis == 1u && (x == 0u || z == 0u)) ||
-        (axis == 2u && (x == 0u || y == 0u))) {
-        return;
-    }
-
     let sx = x + 1u;
     let sy = y + 1u;
     let sz = z + 1u;
@@ -169,21 +169,25 @@ fn emit_indices(@builtin(global_invocation_id) gid: vec3<u32>) {
     var b = 0u;
     var c = 0u;
     var d = 0u;
+    // Per-block ownership: each primal edge starting at a grid point
+    // [0, cells) belongs to this block, even when it lies on its low face.
+    // The negative cell halo provides the adjacent four Surface Nets
+    // vertices. No per-face omission or cross-block draw dependency.
     if (axis == 0u) {
-        a = vertex_slot(x, y - 1u, z - 1u);
-        b = vertex_slot(x, y, z - 1u);
-        c = vertex_slot(x, y - 1u, z);
-        d = vertex_slot(x, y, z);
+        a = vertex_slot(x + 1u, y, z);
+        b = vertex_slot(x + 1u, y + 1u, z);
+        c = vertex_slot(x + 1u, y, z + 1u);
+        d = vertex_slot(x + 1u, y + 1u, z + 1u);
     } else if (axis == 1u) {
-        a = vertex_slot(x - 1u, y, z - 1u);
-        b = vertex_slot(x, y, z - 1u);
-        c = vertex_slot(x - 1u, y, z);
-        d = vertex_slot(x, y, z);
+        a = vertex_slot(x, y + 1u, z);
+        b = vertex_slot(x + 1u, y + 1u, z);
+        c = vertex_slot(x, y + 1u, z + 1u);
+        d = vertex_slot(x + 1u, y + 1u, z + 1u);
     } else {
-        a = vertex_slot(x - 1u, y - 1u, z);
-        b = vertex_slot(x, y - 1u, z);
-        c = vertex_slot(x - 1u, y, z);
-        d = vertex_slot(x, y, z);
+        a = vertex_slot(x, y, z + 1u);
+        b = vertex_slot(x + 1u, y, z + 1u);
+        c = vertex_slot(x, y + 1u, z + 1u);
+        d = vertex_slot(x + 1u, y + 1u, z + 1u);
     }
 
     // Base winding a,b,c faces +X, -Y, +Z respectively.

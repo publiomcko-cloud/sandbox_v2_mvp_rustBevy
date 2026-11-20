@@ -4,7 +4,8 @@
 //!
 //! B2 intentionally fixes capacity per block. Empty edge slots become
 //! degenerate triangles. B3 will add compaction, indirect drawing and
-//! verified seam/LOD transitions before streaming is enabled.
+//! mixed-LOD transitions before streaming is enabled. Same-LOD seams
+//! use one negative cell of SDF halo for vertex replication.
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -72,7 +73,9 @@ struct BuildSdfMesh {
 
 fn b2_counts(grid: DensityGrid) -> (usize, usize) {
     let cells = grid.cells * grid.cells * grid.cells;
-    (cells, cells * INDICES_PER_CELL as usize)
+    // One negative halo cell along each axis. The extra cells are
+    // referenced by quads owned at each block's low border.
+    ((grid.cells + 1).pow(3), cells * INDICES_PER_CELL as usize)
 }
 
 fn setup_b2_scene(
@@ -301,8 +304,9 @@ fn compute_b2(
             continue;
         };
         let cells = job.grid.cells as u32;
-        let vertex_count = cells * cells * cells;
-        let index_count = vertex_count * INDICES_PER_CELL;
+        let vertex_count = (cells + 1).pow(3);
+        let cell_count = cells.pow(3);
+        let index_count = cell_count * INDICES_PER_CELL;
         let vertex_start = vslice.range.start * FLOATS_PER_VERTEX;
         let vertex_end = vslice.range.end * FLOATS_PER_VERTEX;
         let index_start = islice.range.start;
@@ -389,7 +393,7 @@ fn compute_b2(
                 });
             pass.set_pipeline(indices_pipeline);
             pass.set_bind_group(0, &surface_group, &[]);
-            pass.dispatch_workgroups((3 * vertex_count).div_ceil(64), 1, 1);
+            pass.dispatch_workgroups((3 * cell_count).div_ceil(64), 1, 1);
         }
         // The render graph executes these stages before the camera draw.
         // Preserve each buffer for the lifetime of the mesh; no per-frame
@@ -410,8 +414,8 @@ mod tests {
         for lod in 0..=2 {
             let g = DensityGrid::new(BlockCoord { x: 0, y: -1, z: -1 }, lod).unwrap();
             let (vertices, indices) = b2_counts(g);
-            assert_eq!(vertices, g.cells.pow(3));
-            assert_eq!(indices, vertices * 18);
+            assert_eq!(vertices, (g.cells + 1).pow(3));
+            assert_eq!(indices, g.cells.pow(3) * 18);
             assert!(indices <= u32::MAX as usize);
         }
     }
