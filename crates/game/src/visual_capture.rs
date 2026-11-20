@@ -1,10 +1,12 @@
 //! Optional Bevy-native render screenshot for automated B2 visual CI.
-//! Captures the primary-window GPU texture, never the host desktop.
+//! Saves either the headless GPU render target or the onscreen window.
+//! In both cases screenshot readback happens only in diagnostic capture mode.
 use bevy::{
     prelude::*,
     render::view::screenshot::{Screenshot, save_to_disk},
 };
 use std::path::PathBuf;
+use sandbox_gpu_terrain::b2::B2HeadlessTarget;
 
 #[derive(Resource)]
 struct VisualCaptureState {
@@ -30,6 +32,7 @@ fn capture_frame(
     time: Res<Time>,
     mut state: ResMut<VisualCaptureState>,
     mut exit: MessageWriter<AppExit>,
+    headless_target: Option<Res<B2HeadlessTarget>>,
 ) {
     let elapsed = time.elapsed_secs();
     if !state.issued && elapsed >= 7.0 {
@@ -39,8 +42,12 @@ fn capture_frame(
             "B2 visual CI: requesting screenshot at {}",
             state.path.display()
         );
+        let capture = match headless_target {
+            Some(target) => Screenshot::image(target.0.clone()),
+            None => Screenshot::primary_window(),
+        };
         commands
-            .spawn(Screenshot::primary_window())
+            .spawn(capture)
             .observe(save_to_disk(state.path.clone()));
     }
 

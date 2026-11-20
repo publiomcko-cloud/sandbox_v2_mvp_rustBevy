@@ -16,6 +16,7 @@ foreach ($shader in @('sdf_density.wgsl', 'surface_nets.wgsl')) {
 
 $env:WGPU_BACKEND = 'vulkan'
 $env:SANDBOX_B2_LOD = '1'
+$env:SANDBOX_B2_HEADLESS = '1'
 $env:RUST_BACKTRACE = '1'
 $env:RUST_LOG = 'info'
 $problems = @()

@@ -9,7 +9,7 @@
 
 use bevy::{
     asset::RenderAssetUsages,
-    camera::visibility::NoFrustumCulling,
+    camera::{RenderTarget, visibility::NoFrustumCulling},
     core_pipeline::schedule::camera_driver,
     mesh::Indices,
     platform::collections::HashMap,
@@ -82,6 +82,7 @@ fn setup_b2_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
 ) {
     // Only a static demonstration patch: streaming, edge stitching and LOD
     // transitions are B3. All visual vertex/index contents come from compute.
@@ -147,16 +148,31 @@ fn setup_b2_scene(
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.8, 0.6, 0.0)),
     ));
-    commands.spawn((
-        Camera3d::default(),
-        if cave_scene {
-            Transform::from_xyz(7.0, -7.0, -6.0).looking_at(Vec3::new(-12.0, -7.0, -6.0), Vec3::Y)
-        } else {
-            Transform::from_xyz(-27.0, 20.0, 34.0).looking_at(Vec3::new(-7.0, 2.0, -7.0), Vec3::Y)
-        },
-    ));
+    let camera_transform = if cave_scene {
+        Transform::from_xyz(7.0, -7.0, -6.0).looking_at(Vec3::new(-12.0, -7.0, -6.0), Vec3::Y)
+    } else {
+        Transform::from_xyz(-27.0, 20.0, 34.0).looking_at(Vec3::new(-7.0, 2.0, -7.0), Vec3::Y)
+    };
+    if std::env::var("SANDBOX_B2_HEADLESS").as_deref() == Ok("1") {
+        let mut image = Image::new_target_texture(1280, 720, TextureFormat::Rgba8UnormSrgb, None);
+        image.asset_usage = RenderAssetUsages::RENDER_WORLD;
+        let target = images.add(image);
+        commands.insert_resource(B2HeadlessTarget(target.clone()));
+        commands.spawn((
+            Camera3d::default(),
+            RenderTarget::Image(target.into()),
+            camera_transform,
+        ));
+        info!("B2 headless GPU image target created (1280x720, no Windows desktop required)");
+    } else {
+        commands.spawn((Camera3d::default(), camera_transform));
+    }
     info!("B2 static GPU terrain initialized (8 blocks, LOD {lod}, seed {SEED})");
 }
+
+/// Target texture retained in MainWorld for the screenshot capture system.
+#[derive(Resource)]
+pub struct B2HeadlessTarget(pub Handle<Image>);
 
 #[derive(Resource, Default)]
 struct PendingB2(Vec<BuildSdfMesh>);

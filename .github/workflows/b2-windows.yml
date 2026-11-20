@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - 'feat/b2-*'
+    paths-ignore:
+      - 'scripts/capture-b2-ci.ps1'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -69,9 +72,9 @@ jobs:
         with:
           name: b2-windows-gpu-resident
           path: b2-runtime
-      - name: Capture surface and cave frames automatically
-        shell: powershell
-        run: .\scripts\capture-b2-ci.ps1
+      - name: Capture surface and cave frames automatically (headless)
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\scripts\capture-b2-ci.ps1"
       - name: Upload screenshots and startup logs
         if: always()
         uses: actions/upload-artifact@v4
