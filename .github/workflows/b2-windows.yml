@@ -70,8 +70,8 @@ jobs:
           name: b2-windows-gpu-resident
           path: b2-runtime
       - name: Capture surface and cave frames automatically
-        shell: pwsh
-        run: ./scripts/capture-b2-ci.ps1
+        shell: powershell
+        run: .\scripts\capture-b2-ci.ps1
       - name: Upload screenshots and startup logs
         if: always()
         uses: actions/upload-artifact@v4
