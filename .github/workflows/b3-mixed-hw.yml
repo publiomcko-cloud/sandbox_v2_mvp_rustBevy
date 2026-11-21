@@ -1,0 +1,95 @@
+name: B3 integrated mixed LOD Windows build and Vulkan route
+
+on:
+  push:
+    branches:
+      - 'diag/b3-mixed-hw-validation-20261121'
+    paths:
+      - '.github/workflows/b3-mixed-hw.yml'
+      - 'scripts/b3-mixed-acceptance-ci.ps1'
+      - 'crates/**'
+      - 'assets/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-mixed-hw-20261121
+  cancel-in-progress: true
+
+jobs:
+  windows-build:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Windows Rust setup
+        shell: cmd
+        env:
+          CARGO_HOME: ${{ runner.temp }}\\b0-cargo
+          RUSTUP_HOME: ${{ runner.temp }}\\b0-rustup
+        run: |
+          if not exist "%CARGO_HOME%\\bin\\rustup.exe" (
+            curl.exe --proto =https --tlsv1.2 --retry 3 -fL -o "%RUNNER_TEMP%\\rustup-init.exe" https://win.rustup.rs/x86_64
+            if errorlevel 1 exit /b 1
+            "%RUNNER_TEMP%\\rustup-init.exe" -y --no-modify-path --default-toolchain none
+            if errorlevel 1 exit /b 1
+          )
+          "%CARGO_HOME%\\bin\\rustup.exe" toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+          if errorlevel 1 exit /b 1
+          echo %CARGO_HOME%\\bin>>"%GITHUB_PATH%"
+          echo CARGO_HOME=%CARGO_HOME%>>"%GITHUB_ENV%"
+          echo RUSTUP_HOME=%RUSTUP_HOME%>>"%GITHUB_ENV%"
+      - name: Identify selected Windows CPU build runner
+        shell: cmd
+        run: echo Windows build on %RUNNER_NAME% / %COMPUTERNAME%
+      - name: Format, LOD CPU contracts, GPU mesh integration
+        shell: cmd
+        run: |
+          cargo +1.100.0 fmt --all -- --check
+          if errorlevel 1 exit /b 1
+          cargo +1.100.0 test --locked -p sandbox-streaming
+          if errorlevel 1 exit /b 1
+          cargo +1.100.0 check --locked -p sandbox-game
+          if errorlevel 1 exit /b 1
+      - name: Build Release
+        shell: cmd
+        run: cargo +1.100.0 build --release --locked -p sandbox-game
+      - name: Package immutable GPU shader and executable pair
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force dist/b3/assets | Out-Null
+          Copy-Item target/release/sandbox-game.exe dist/b3/sandbox-game.exe
+          Copy-Item assets/shaders dist/b3/assets/shaders -Recurse -Force
+          Copy-Item Cargo.lock dist/b3/Cargo.lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b3-integrated-mixed-release
+          path: dist/b3/
+          if-no-files-found: error
+
+  vulkan-mixed:
+    needs: windows-build
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: b3-integrated-mixed-release
+          path: b3-runtime
+      - name: Run opt-in three-tier LOD integrated Vulkan route
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\\scripts\\b3-mixed-acceptance-ci.ps1"
+      - name: Preserve mixed LOD hardware diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-integrated-mixed-validation
+          path: b3-mixed-report/
+          if-no-files-found: warn
