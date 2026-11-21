@@ -1,0 +1,59 @@
+name: B3 adaptive seam 2:1 Vulkan hardware proof
+
+on:
+  push:
+    branches:
+      - 'research/b3-adaptive-dual-*'
+    paths:
+      - 'crates/density_validation/src/b3_transition_gpu.rs'
+      - '.github/workflows/b3-adaptive-vulkan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulkan-seam:
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: '1'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision Rust 1.100.0 for service account
+        shell: cmd
+        env:
+          CARGO_HOME: ${{ runner.temp }}\\b0-cargo
+          RUSTUP_HOME: ${{ runner.temp }}\\b0-rustup
+        run: |
+          if not exist "%CARGO_HOME%\\bin\\rustup.exe" (
+            curl.exe --proto =https --tlsv1.2 --retry 3 -fL -o "%RUNNER_TEMP%\\rustup-init.exe" https://win.rustup.rs/x86_64
+            if errorlevel 1 exit /b 1
+            "%RUNNER_TEMP%\\rustup-init.exe" -y --no-modify-path --default-toolchain none
+            if errorlevel 1 exit /b 1
+          )
+          "%CARGO_HOME%\\bin\\rustup.exe" toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          if errorlevel 1 exit /b 1
+          echo %CARGO_HOME%\\bin>>"%GITHUB_PATH%"
+          echo CARGO_HOME=%CARGO_HOME%>>"%GITHUB_ENV%"
+          echo RUSTUP_HOME=%RUSTUP_HOME%>>"%GITHUB_ENV%"
+
+      - name: Runner identity and Rust toolchain
+        shell: cmd
+        run: |
+          echo Runner: %RUNNER_NAME% (%RUNNER_OS%/%RUNNER_ARCH%)
+          echo Computer: %COMPUTERNAME%
+          where rustc
+          rustc --version
+          cargo --version
+
+      - name: Format Rust test
+        shell: cmd
+        run: cargo +1.100.0 fmt --all -- --check
+      - name: Vulkan 2-to-1 adaptive dual Surface Nets crossings
+        shell: cmd
+        env:
+          WGPU_BACKEND: vulkan
+        run: cargo +1.100.0 test --locked -p sandbox-density-gpu-validation b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles -- --ignored --nocapture
