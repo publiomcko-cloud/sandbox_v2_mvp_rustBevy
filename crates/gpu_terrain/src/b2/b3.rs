@@ -11,7 +11,7 @@ use super::{
 };
 use bevy::{
     asset::RenderAssetUsages,
-    camera::{RenderTarget, visibility::NoFrustumCulling},
+    camera::{RenderTarget, primitives::Aabb},
     core_pipeline::schedule::camera_driver,
     mesh::Indices,
     prelude::*,
@@ -235,8 +235,10 @@ fn stream_b3(
                 Mesh3d(handle.clone()),
                 MeshMaterial3d(material.clone()),
                 Visibility::Hidden,
-                // AABB built from placeholder positions is not correct.
-                NoFrustumCulling,
+                // The GPU may emit vertices one LOD2 cell (2m) beyond the
+                // low block face. This manual bound replaces the zero-filled
+                // placeholder mesh AABB and allows correct frustum culling.
+                Aabb::from_min_max(Vec3::splat(-2.1), Vec3::splat(16.1)),
                 Transform::from_xyz(
                     coord.x as f32 * 16.0,
                     coord.y as f32 * 16.0,
