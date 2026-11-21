@@ -507,7 +507,9 @@ fn stream_b3(
         let lod0 = state.blocks.values().filter(|b| b.spec.lod == 0).count();
         let lod1 = state.blocks.values().filter(|b| b.spec.lod == 1).count();
         let lod2 = state.blocks.values().filter(|b| b.spec.lod == 2).count();
-        let seam_blocks = state.blocks.values()
+        let seam_blocks = state
+            .blocks
+            .values()
             .filter(|b| b.spec.seam.negative_face_mask != 0)
             .count();
         info!(
