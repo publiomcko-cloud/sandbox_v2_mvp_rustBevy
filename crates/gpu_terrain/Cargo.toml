@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 bevy.workspace = true
 sandbox-world-core = { path = "../world_core" }
+sandbox-streaming = { path = "../streaming" }
 
 [lib]
 name = "sandbox_gpu_terrain"
