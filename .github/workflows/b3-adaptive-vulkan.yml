@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: b3-adaptive-vulkan-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   vulkan-seam:
     runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
