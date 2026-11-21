@@ -1,0 +1,27 @@
+name: B3 check GPU host reachability from second Windows runner
+
+on:
+  push:
+    branches:
+      - 'diag/b3-mixed-hw-validation-20261121'
+    paths:
+      - '.github/workflows/b3-runner-reachability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reachability:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Windows host identity and GPU computer network check
+        shell: cmd
+        run: |
+          echo PROBE_RUNNER=%RUNNER_NAME%
+          echo TARGET_HOST=DESKTOP-SAFGO15
+          ping -n 2 DESKTOP-SAFGO15
+          echo PING_EXIT=%ERRORLEVEL%
+          powershell.exe -NoLogo -NoProfile -NonInteractive -Command "try { $r=Test-Connection -ComputerName 'DESKTOP-SAFGO15' -Count 1 -ErrorAction Stop; Write-Host ('GPU_HOST_ICMP_REACHABLE=' + [bool]$r) } catch { Write-Host ('GPU_HOST_ICMP_ERROR=' + $_.Exception.Message) }"
+          exit /b 0
