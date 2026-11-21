@@ -7,6 +7,8 @@
 //! mixed-LOD transitions before streaming is enabled. Same-LOD seams
 //! use one negative cell of SDF halo for vertex replication.
 
+pub mod b3;
+
 use bevy::{
     asset::RenderAssetUsages,
     camera::{RenderTarget, visibility::NoFrustumCulling},
@@ -26,6 +28,7 @@ use bevy::{
     },
 };
 use sandbox_world_core::{BlockCoord, density::DensityGrid};
+use std::collections::HashSet;
 
 const SEED: u32 = 42;
 const DENSITY_SHADER: &str = "shaders/sdf_density.wgsl";
@@ -272,7 +275,7 @@ fn init_b2_pipelines(mut commands: Commands, assets: Res<AssetServer>, cache: Re
 fn prepare_b2(
     commands: Query<&BuildSdfMesh>,
     mut pending: ResMut<PendingB2>,
-    resident: Res<B2ResidentBuffers>,
+    mut resident: ResMut<B2ResidentBuffers>,
     cache: Res<PipelineCache>,
     pipelines: Res<B2Pipelines>,
 ) {
@@ -283,6 +286,11 @@ fn prepare_b2(
         pending.0.clear();
         return;
     }
+    // The streaming system removes Assets<Mesh> only outside the retention
+    // ring. Drop resident density buffers when their mesh is no longer in
+    // the extracted render-world set, avoiding unbounded GPU memory growth.
+    let active: HashSet<_> = commands.iter().map(|job| job.handle.id()).collect();
+    resident.0.retain(|mesh_id, _| active.contains(mesh_id));
     pending.0 = commands
         .iter()
         .filter(|job| !resident.0.contains_key(&job.handle.id()))
@@ -298,6 +306,7 @@ fn compute_b2(
     cache: Res<PipelineCache>,
     pipelines: Res<B2Pipelines>,
     queue: Res<RenderQueue>,
+    b3_ready: Option<Res<b3::B3ReadySet>>,
 ) {
     let (Some(density_pipeline), Some(vertices_pipeline), Some(indices_pipeline)) = (
         cache.get_compute_pipeline(pipelines.density),
@@ -415,6 +424,13 @@ fn compute_b2(
         // Preserve each buffer for the lifetime of the mesh; no per-frame
         // uploads or runtime readback.
         resident.0.insert(id, density_buffer);
+        if let Some(ref signal) = b3_ready {
+            // The draw command uses this mesh only from a future frame
+            // after these three compute dispatches have been submitted.
+            if let Ok(mut set) = signal.0.lock() {
+                set.insert(id);
+            }
+        }
         info!(?id, ?job.grid.coord, lod = job.grid.lod,
             vertices = vertex_count, index_slots = index_count,
             "B2 GPU density/extraction dispatched");
