@@ -13,16 +13,25 @@ struct VisualCaptureState {
     path: PathBuf,
     issued: bool,
     requested_at: f32,
+    capture_after_secs: f32,
 }
 
 pub fn configure(app: &mut App) {
     let Ok(path) = std::env::var("SANDBOX_B2_CAPTURE_PATH") else {
         return;
     };
+    // B2 retains its seven-second capture. B3 diagnostics may capture at
+    // the end of an 18m/s continuous route without prematurely exiting.
+    let capture_after_secs = std::env::var("SANDBOX_B3_CAPTURE_AFTER_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<f32>().ok())
+        .filter(|value| value.is_finite() && *value >= 1.0 && *value <= 90.0)
+        .unwrap_or(7.0);
     app.insert_resource(VisualCaptureState {
         path: PathBuf::from(path),
         issued: false,
         requested_at: 0.0,
+        capture_after_secs,
     })
     .add_systems(Update, capture_frame);
 }
@@ -35,7 +44,7 @@ fn capture_frame(
     headless_target: Option<Res<B2HeadlessTarget>>,
 ) {
     let elapsed = time.elapsed_secs();
-    if !state.issued && elapsed >= 7.0 {
+    if !state.issued && elapsed >= state.capture_after_secs {
         state.issued = true;
         state.requested_at = elapsed;
         info!(
@@ -62,8 +71,8 @@ fn capture_frame(
         exit.write(AppExit::Success);
     }
 
-    if elapsed > 40.0 {
-        error!("B2 visual CI: screenshot did not complete in 40 seconds");
+    if elapsed > state.capture_after_secs + 25.0 {
+        error!("B3 visual CI: screenshot did not complete within capture deadline");
         std::process::exit(3);
     }
 }
