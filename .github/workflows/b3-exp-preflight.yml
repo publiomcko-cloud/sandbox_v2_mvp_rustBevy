@@ -1,0 +1,49 @@
+name: B3 optimization and LOD research preflight
+
+on:
+  push:
+    branches:
+      - 'exp/b3-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exp-b3-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.100 pinned
+        shell: bash
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+          rustup default 1.100.0
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Streaming CPU contracts
+        run: cargo test --locked -p sandbox-streaming -- --nocapture
+      - name: Deterministic density regression
+        run: cargo test --locked -p sandbox-world-core
+
+  windows-check:
+    runs-on: windows-latest
+    needs: cpu
+    timeout-minutes: 80
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        shell: pwsh
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+      - name: Check Bevy streaming runtime before Release
+        shell: pwsh
+        run: cargo check --locked -p sandbox-game
