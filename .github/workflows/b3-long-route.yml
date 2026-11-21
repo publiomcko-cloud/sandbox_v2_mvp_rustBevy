@@ -1,0 +1,40 @@
+name: B3 long 18m/s streaming GPU diagnostic (reuse Release)
+
+on:
+  push:
+    branches:
+      - 'diag/b3-long-route-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: b3-long-route-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  long-route:
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download previously verified B3 Release (no Rust compilation)
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: 44895882768
+          name: b3-windows-gpu-streaming
+          path: b3-runtime
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Execute 45s GPU route and analyze horizon coverage
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\scripts\b3-long-route-ci.ps1"
+      - name: Publish trace even on validation failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-long-route-diagnostic
+          path: b3-long-route-report/
+          if-no-files-found: warn
