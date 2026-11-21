@@ -1,0 +1,75 @@
+name: B3 optimized 1080p Release and A/B GPU benchmark
+
+on:
+  push:
+    branches:
+      - 'exp/b3-framebudget-lod-transition-20261121'
+    paths:
+      - '.github/workflows/b3-exp-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-exp-release-20261121
+  cancel-in-progress: true
+
+jobs:
+  release:
+    # This job is only enabled after the lightweight CPU contracts and
+    # Windows cargo-check preflight have passed separately.
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 100
+    env:
+      CARGO_BUILD_JOBS: '4'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure Rust 1.100 toolchain is present
+        shell: powershell
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+      - name: Verify formatting
+        shell: powershell
+        run: cargo +1.100.0 fmt --all -- --check
+      - name: Build optimized Windows Bevy game once
+        shell: powershell
+        run: cargo +1.100.0 build --release --locked -p sandbox-game
+      - name: Package 1080p benchmark executable and shader assets
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force dist/b3/assets | Out-Null
+          Copy-Item target/release/sandbox-game.exe dist/b3/sandbox-game.exe
+          Copy-Item assets/shaders dist/b3/assets/shaders -Recurse -Force
+          Copy-Item Cargo.lock dist/b3/Cargo.lock
+          if (-not (Test-Path dist/b3/assets/shaders/surface_nets.wgsl)) { throw "Missing shader" }
+          if (-not (Test-Path dist/b3/sandbox-game.exe)) { throw "Missing executable" }
+      - name: Upload reusable optimized B3 Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-exp-framebudget-release
+          path: dist/b3/
+          if-no-files-found: error
+
+  ab-benchmark:
+    needs: release
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse compiled B3 artifact (no recompile)
+        uses: actions/download-artifact@v4
+        with:
+          name: b3-exp-framebudget-release
+          path: b3-runtime
+      - name: Baseline and optimized 18m/s 1080p Vulkan test
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\scripts\b3-ab-perf-ci.ps1"
+      - name: Publish benchmark PNGs, frame-time samples and GPU logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-framebudget-ab-report
+          path: b3-ab-report/
+          if-no-files-found: warn
