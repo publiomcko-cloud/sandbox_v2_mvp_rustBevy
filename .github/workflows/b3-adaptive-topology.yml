@@ -1,0 +1,26 @@
+name: B3 adaptive dual contour seam topology CPU proof
+
+on:
+  push:
+    branches:
+      - 'research/b3-adaptive-dual-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  topology:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.100 toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+          rustup default 1.100.0
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Adaptive dual seam topology and SDF tests
+        run: cargo test --locked -p sandbox-streaming -- --nocapture
