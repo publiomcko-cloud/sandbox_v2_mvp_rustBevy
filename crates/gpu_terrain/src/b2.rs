@@ -278,6 +278,8 @@ fn prepare_b2(
     mut resident: ResMut<B2ResidentBuffers>,
     cache: Res<PipelineCache>,
     pipelines: Res<B2Pipelines>,
+    b3_ready: Option<Res<b3::B3ReadySet>>,
+    mut frame: Local<u64>,
 ) {
     if cache.get_compute_pipeline(pipelines.density).is_none()
         || cache.get_compute_pipeline(pipelines.vertices).is_none()
@@ -286,16 +288,24 @@ fn prepare_b2(
         pending.0.clear();
         return;
     }
-    // The streaming system removes Assets<Mesh> only outside the retention
-    // ring. Drop resident density buffers when their mesh is no longer in
-    // the extracted render-world set, avoiding unbounded GPU memory growth.
-    let active: HashSet<_> = commands.iter().map(|job| job.handle.id()).collect();
-    resident.0.retain(|mesh_id, _| active.contains(mesh_id));
-    pending.0 = commands
-        .iter()
-        .filter(|job| !resident.0.contains_key(&job.handle.id()))
-        .cloned()
-        .collect();
+    *frame += 1;
+    // The B2 static stage retains its original eager reclamation.
+    // The B3 streaming stage amortizes the O(resident meshes) HashSet
+    // and retain pass: a stale density buffer is kept at most 15 frames
+    // after mesh eviction, never indefinitely.
+    if b3_ready.is_none() || *frame % 16 == 0 {
+        let active: HashSet<_> = commands.iter().map(|job| job.handle.id()).collect();
+        resident.0.retain(|mesh_id, _| active.contains(mesh_id));
+    }
+    pending.0.clear();
+    let quota = if b3_ready.is_some() { 5 } else { usize::MAX };
+    pending.0.extend(
+        commands
+            .iter()
+            .filter(|job| !resident.0.contains_key(&job.handle.id()))
+            .take(quota)
+            .cloned(),
+    );
 }
 
 fn compute_b2(
