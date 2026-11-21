@@ -26,3 +26,20 @@ jobs:
         run: cargo test --locked -p sandbox-streaming -- --nocapture
       - name: Validate GPU seam shader (Naga)
         run: cargo test --locked -p sandbox-density-gpu-validation b3_adaptive_transition_shader_parses_and_validates -- --nocapture
+
+  windows-check:
+    needs: topology
+    runs-on: windows-latest
+    timeout-minutes: 70
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        shell: pwsh
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+      - name: Check adaptive GPU seam integration in Bevy
+        shell: pwsh
+        run: cargo +1.100.0 check --locked -p sandbox-game
