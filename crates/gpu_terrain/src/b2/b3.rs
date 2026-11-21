@@ -504,6 +504,12 @@ fn stream_b3(
         let cpu_avg_us = state.cpu_samples_us.iter().map(|x| *x as u64).sum::<u64>()
             / state.cpu_samples_us.len().max(1) as u64;
         state.cpu_samples_us.clear();
+        let lod0 = state.blocks.values().filter(|b| b.spec.lod == 0).count();
+        let lod1 = state.blocks.values().filter(|b| b.spec.lod == 1).count();
+        let lod2 = state.blocks.values().filter(|b| b.spec.lod == 2).count();
+        let seam_blocks = state.blocks.values()
+            .filter(|b| b.spec.seam.negative_face_mask != 0)
+            .count();
         info!(
             required,
             visible,
@@ -520,6 +526,10 @@ fn stream_b3(
             replans = state.plan_refreshes,
             baseline_scheduler = state.baseline_scheduler,
             mixed_lod = state.mixed_lod,
+            lod0,
+            lod1,
+            lod2,
+            seam_blocks,
             transition_pending = state.transition_pending.len(),
             transition_queued = state.transition_target.len(),
             transition_commits = state.transition_commits,
