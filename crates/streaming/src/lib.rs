@@ -104,3 +104,6 @@ mod tests {
         assert_eq!(residency.visible(), Some(&20));
     }
 }
+
+#[cfg(test)]
+mod lod_topology_reference;
