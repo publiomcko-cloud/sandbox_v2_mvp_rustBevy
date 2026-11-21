@@ -28,7 +28,11 @@ fn pack_lods(current_lod: u8, negative_neighbor_lod: u8) -> (u32, u32) {
         for y in 0..3 {
             for x in 0..3 {
                 let index = (z * 9 + y * 3 + x) as u32;
-                let lod = if x == 0 { negative_neighbor_lod } else { current_lod };
+                let lod = if x == 0 {
+                    negative_neighbor_lod
+                } else {
+                    current_lod
+                };
                 let bit = index * 2;
                 let slot = (bit / 32) as usize;
                 words[slot] |= (lod as u32) << (bit % 32);
@@ -66,9 +70,13 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
     let adapter = await_future(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         ..Default::default()
-    })).expect("Vulkan adapter required");
+    }))
+    .expect("Vulkan adapter required");
     let info = adapter.get_info();
-    assert!(matches!(info.device_type, wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu));
+    assert!(matches!(
+        info.device_type,
+        wgpu::DeviceType::DiscreteGpu | wgpu::DeviceType::IntegratedGpu
+    ));
     println!("B3 adaptive seam adapter: {}", info.name);
     let (device, queue) = await_future(adapter.request_device(&wgpu::DeviceDescriptor::default()))
         .expect("Vulkan device required");
@@ -79,18 +87,46 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("B3 seam shared B2 binding contract"),
         entries: &[
-            wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false, min_binding_size: None }, count: None },
-            wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false, min_binding_size: None }, count: None },
-            wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false, min_binding_size: None }, count: None },
-            wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false, min_binding_size: None }, count: None },
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -119,14 +155,27 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
         let (word0, word1) = pack_lods(lod, neighbor_lod);
 
         let words: [u32; 16] = [
-            grid.base_half[0] as u32, grid.base_half[1] as u32,
-            grid.base_half[2] as u32, 42,
-            grid.step_half as u32, grid.dim as u32, grid.len() as u32, 1,
-            0, vertices_count * 8, 0, indices_count,
-            cells, 0, word0, word1,
+            grid.base_half[0] as u32,
+            grid.base_half[1] as u32,
+            grid.base_half[2] as u32,
+            42,
+            grid.step_half as u32,
+            grid.dim as u32,
+            grid.len() as u32,
+            1,
+            0,
+            vertices_count * 8,
+            0,
+            indices_count,
+            cells,
+            0,
+            word0,
+            word1,
         ];
         let mut uniform_bytes = Vec::new();
-        for word in words { uniform_bytes.extend_from_slice(&word.to_le_bytes()); }
+        for word in words {
+            uniform_bytes.extend_from_slice(&word.to_le_bytes());
+        }
         let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("B3 seam uniform"),
             contents: &uniform_bytes,
@@ -168,10 +217,22 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
             label: Some("B3 seam shared binding group"),
             layout: &layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: dummy_density.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: vertices.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: indices.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: dummy_density.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: vertices.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: indices.as_entire_binding(),
+                },
             ],
         });
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -179,7 +240,8 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
         });
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("B3 seam dispatch"), timestamp_writes: None,
+                label: Some("B3 seam dispatch"),
+                timestamp_writes: None,
             });
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &group, &[]);
@@ -190,24 +252,39 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
         queue.submit(Some(encoder.finish()));
         let (vtx, vrx) = std::sync::mpsc::channel();
         let (itx, irx) = std::sync::mpsc::channel();
-        read_vertices.slice(..).map_async(wgpu::MapMode::Read, move |status| {
-            let _ = vtx.send(status);
-        });
-        read_indices.slice(..).map_async(wgpu::MapMode::Read, move |status| {
-            let _ = itx.send(status);
-        });
-        device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(Duration::from_secs(30)),
-        }).expect("B3 seam GPU execution failed");
+        read_vertices
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |status| {
+                let _ = vtx.send(status);
+            });
+        read_indices
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |status| {
+                let _ = itx.send(status);
+            });
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_secs(30)),
+            })
+            .expect("B3 seam GPU execution failed");
         vrx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
         irx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
 
         let vm = read_vertices.get_mapped_range(..);
         let im = read_indices.get_mapped_range(..);
-        let floats: Vec<f32> = vm.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
-        let index_values: Vec<u32> = im.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
-        assert!(index_values.iter().all(|v| *v < vertices_count), "out of bounds seam index");
+        let floats: Vec<f32> = vm
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        let index_values: Vec<u32> = im
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        assert!(
+            index_values.iter().all(|v| *v < vertices_count),
+            "out of bounds seam index"
+        );
         let mut triangles = 0usize;
         let mut crossing = 0usize;
         for face in index_values[normal_indices as usize..].chunks_exact(3) {
@@ -219,15 +296,25 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
             let mut x_high = false;
             for &index in face {
                 let start = index as usize * 8;
-                assert!(floats[start..start+6].iter().all(|v| v.is_finite()));
+                assert!(floats[start..start + 6].iter().all(|v| v.is_finite()));
                 x_low |= floats[start] < -0.00001;
                 x_high |= floats[start] >= -0.00001;
             }
-            if x_low && x_high { crossing += 1; }
+            if x_low && x_high {
+                crossing += 1;
+            }
         }
-        println!("B3 Vulkan 2:1 adaptive seam PASS lod={lod} other={neighbor_lod} triangles={triangles} crossing={crossing} index_slots={indices_count}");
-        assert!(triangles > 0, "GPU seam emitted no triangles for real B1 cave/SDF");
-        assert!(crossing > 0, "GPU seam did not connect vertices across the block border");
+        println!(
+            "B3 Vulkan 2:1 adaptive seam PASS lod={lod} other={neighbor_lod} triangles={triangles} crossing={crossing} index_slots={indices_count}"
+        );
+        assert!(
+            triangles > 0,
+            "GPU seam emitted no triangles for real B1 cave/SDF"
+        );
+        assert!(
+            crossing > 0,
+            "GPU seam did not connect vertices across the block border"
+        );
         drop(vm);
         drop(im);
         read_vertices.unmap();
