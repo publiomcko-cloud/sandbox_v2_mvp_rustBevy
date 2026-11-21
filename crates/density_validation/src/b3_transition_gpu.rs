@@ -271,8 +271,12 @@ fn b3_gpu_adaptive_dual_seam_emits_valid_cross_boundary_triangles() {
         vrx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
         irx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
 
-        let vm = read_vertices.get_mapped_range(..).expect("vertex readback mapping");
-        let im = read_indices.get_mapped_range(..).expect("index readback mapping");
+        let vm = read_vertices
+            .get_mapped_range(..)
+            .expect("vertex readback mapping");
+        let im = read_indices
+            .get_mapped_range(..)
+            .expect("index readback mapping");
         let floats: Vec<f32> = vm
             .chunks_exact(4)
             .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
