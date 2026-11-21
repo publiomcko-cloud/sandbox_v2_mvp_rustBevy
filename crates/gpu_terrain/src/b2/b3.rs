@@ -6,8 +6,8 @@
 //! three passes. The CPU does not synchronously wait for GPU completion.
 
 use super::{
-    B2HeadlessTarget, B2Pipelines, B2ResidentBuffers, BuildSdfMesh, PendingB2,
-    b2_counts, compute_b2, init_b2_pipelines, prepare_b2,
+    B2HeadlessTarget, B2Pipelines, B2ResidentBuffers, BuildSdfMesh, PendingB2, b2_counts,
+    compute_b2, init_b2_pipelines, prepare_b2,
 };
 use bevy::{
     asset::RenderAssetUsages,
@@ -54,9 +54,7 @@ impl Plugin for GpuTerrainB3Plugin {
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             return;
         };
-        render_app
-            .world_mut()
-            .insert_resource(ready);
+        render_app.world_mut().insert_resource(ready);
         render_app
             .init_resource::<PendingB2>()
             .init_resource::<B2ResidentBuffers>()
@@ -116,11 +114,9 @@ fn setup_b3_scene(
 
     let cave = std::env::var("SANDBOX_B2_SCENE").as_deref() == Ok("cave");
     let camera_transform = if cave {
-        Transform::from_xyz(-8.0, -7.0, 2.0)
-            .looking_at(Vec3::new(6.0, -7.0, -3.0), Vec3::Y)
+        Transform::from_xyz(-8.0, -7.0, 2.0).looking_at(Vec3::new(6.0, -7.0, -3.0), Vec3::Y)
     } else {
-        Transform::from_xyz(-17.0, 15.0, 14.0)
-            .looking_at(Vec3::new(4.0, 2.0, -7.0), Vec3::Y)
+        Transform::from_xyz(-17.0, 15.0, 14.0).looking_at(Vec3::new(4.0, 2.0, -7.0), Vec3::Y)
     };
     if std::env::var("SANDBOX_B2_HEADLESS").as_deref() == Ok("1")
         || std::env::var("SANDBOX_B3_HEADLESS").as_deref() == Ok("1")
@@ -201,7 +197,11 @@ fn stream_b3(
         }
     }
 
-    let material = state.material.as_ref().expect("B3 material not initialized").clone();
+    let material = state
+        .material
+        .as_ref()
+        .expect("B3 material not initialized")
+        .clone();
     let mut new_count = 0_usize;
     for candidate in &target.targets {
         if state.blocks.contains_key(&candidate.coord) {
@@ -216,20 +216,14 @@ fn stream_b3(
             continue;
         };
         let (vertex_count, index_count) = b2_counts(grid);
-        let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
-            .with_inserted_attribute(
-                Mesh::ATTRIBUTE_POSITION,
-                vec![[0.0_f32; 3]; vertex_count],
-            )
-            .with_inserted_attribute(
-                Mesh::ATTRIBUTE_NORMAL,
-                vec![[0.0_f32; 3]; vertex_count],
-            )
-            .with_inserted_attribute(
-                Mesh::ATTRIBUTE_UV_0,
-                vec![[0.0_f32; 2]; vertex_count],
-            )
-            .with_inserted_indices(Indices::U32(vec![0_u32; index_count]));
+        let mesh = Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0_f32; 3]; vertex_count])
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0_f32; 3]; vertex_count])
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0_f32; 2]; vertex_count])
+        .with_inserted_indices(Indices::U32(vec![0_u32; index_count]));
         let handle = meshes.add(mesh);
         let entity = commands
             .spawn((
@@ -250,29 +244,43 @@ fn stream_b3(
                 ),
             ))
             .id();
-        state.blocks.insert(coord, ActiveBlock {
-            mesh: handle,
-            entity,
-            visible: false,
-        });
+        state.blocks.insert(
+            coord,
+            ActiveBlock {
+                mesh: handle,
+                entity,
+                visible: false,
+            },
+        );
         new_count += 1;
         state.dispatches += 1;
     }
 
     if state.frame % 60 == 0 {
         let required = target.required.len();
-        let visible = target.required.iter().filter(|c| {
-            state.blocks.get(c).is_some_and(|b| b.visible)
-        }).count();
+        let visible = target
+            .required
+            .iter()
+            .filter(|c| state.blocks.get(c).is_some_and(|b| b.visible))
+            .count();
         info!(
-            required, visible, missing = required - visible,
-            resident = state.blocks.len(), scheduled = new_count,
-            evictions = state.evictions, total_allocations = state.dispatches,
-            x = position.x, y = position.y, z = position.z,
+            required,
+            visible,
+            missing = required - visible,
+            resident = state.blocks.len(),
+            scheduled = new_count,
+            evictions = state.evictions,
+            total_allocations = state.dispatches,
+            x = position.x,
+            y = position.y,
+            z = position.z,
             "B3 horizon coverage (130m, two vertical layers, GPU mesh ready)"
         );
         if required > visible {
-            warn!(missing = required - visible, "B3 incomplete horizon; gate remains HOLD");
+            warn!(
+                missing = required - visible,
+                "B3 incomplete horizon; gate remains HOLD"
+            );
         }
     }
 }
