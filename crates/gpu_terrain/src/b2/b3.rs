@@ -108,8 +108,7 @@ fn setup_b3_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    state.baseline_scheduler =
-        std::env::var("SANDBOX_B3_SCHEDULER").as_deref() == Ok("baseline");
+    state.baseline_scheduler = std::env::var("SANDBOX_B3_SCHEDULER").as_deref() == Ok("baseline");
     state.cpu_samples_us = Vec::with_capacity(60);
     state.material = Some(materials.add(StandardMaterial {
         base_color: Color::srgb(0.34, 0.59, 0.37),
@@ -187,8 +186,7 @@ fn stream_b3(
     // position once per second, rather than trusting the cached plan.
     let direction2 = Vec2::new(direction[0], direction[1]).normalize_or_zero();
     let moved = (position.xz() - state.plan_position.xz()).length();
-    let heading_changed = state.plan_direction.dot(direction2)
-        < DIRECTION_COSINE_THRESHOLD;
+    let heading_changed = state.plan_direction.dot(direction2) < DIRECTION_COSINE_THRESHOLD;
     let should_refresh = state.baseline_scheduler
         || state.cached_plan.is_none()
         || moved >= PLAN_UPDATE_DISTANCE_M
