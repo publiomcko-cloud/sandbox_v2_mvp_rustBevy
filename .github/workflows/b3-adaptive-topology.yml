@@ -24,3 +24,5 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Adaptive dual seam topology and SDF tests
         run: cargo test --locked -p sandbox-streaming -- --nocapture
+      - name: Validate GPU seam shader (Naga)
+        run: cargo test --locked -p sandbox-density-gpu-validation b3_adaptive_transition_shader_parses_and_validates -- --nocapture

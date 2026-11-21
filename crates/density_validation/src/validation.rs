@@ -14,6 +14,19 @@ use std::{
 const SHADER: &str = include_str!("../../../assets/shaders/sdf_density.wgsl");
 
 #[test]
+fn b3_adaptive_transition_shader_parses_and_validates() {
+    let shader = include_str!("../../../assets/shaders/lod_transition.wgsl");
+    let module = naga::front::wgsl::parse_str(shader)
+        .unwrap_or_else(|e| panic!("B3 adaptive dual WGSL parse: {}", e.emit_to_string(shader)));
+    let mut validator = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    );
+    validator.validate(&module).expect("B3 adaptive dual WGSL validation failed");
+    assert!(module.entry_points.iter().any(|e| e.name == "emit_transition"));
+}
+
+#[test]
 fn b2_surface_nets_shader_parses_and_validates() {
     let shader = include_str!("../../../assets/shaders/surface_nets.wgsl");
     let module = naga::front::wgsl::parse_str(shader)
