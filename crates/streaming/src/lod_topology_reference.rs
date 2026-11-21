@@ -20,8 +20,18 @@ struct TopologyReport {
     nonmanifold_internal_edges: usize,
 }
 
-fn cell_for_fine_corner(point: [i32; 3], axis: usize, boundary: i32, low_stride: i32, high_stride: i32) -> Cell {
-    let stride = if point[axis] < boundary { low_stride } else { high_stride };
+fn cell_for_fine_corner(
+    point: [i32; 3],
+    axis: usize,
+    boundary: i32,
+    low_stride: i32,
+    high_stride: i32,
+) -> Cell {
+    let stride = if point[axis] < boundary {
+        low_stride
+    } else {
+        high_stride
+    };
     Cell {
         lower: point.map(|value| value.div_euclid(stride) * stride),
         stride,
@@ -48,9 +58,7 @@ fn reference_topology(
     let lower = [border_half - margin; 3];
     let upper = [border_half + margin; 3];
     let mut density_cache: HashMap<[i32; 3], f32> = HashMap::new();
-    let mut sampled = |p: [i32; 3]| -> f32 {
-        *density_cache.entry(p).or_insert_with(|| field(p))
-    };
+    let mut sampled = |p: [i32; 3]| -> f32 { *density_cache.entry(p).or_insert_with(|| field(p)) };
 
     let mut topology = HashMap::<(Cell, Cell), u32>::new();
     let mut triangle_count = 0usize;
@@ -77,16 +85,28 @@ fn reference_topology(
                     }
                     let mut end = source;
                     end[edge_axis] += stride;
-                    if end[edge_axis] >= upper[edge_axis] { continue; }
-                    if (sampled(source) < 0.0) == (sampled(end) < 0.0) { continue; }
+                    if end[edge_axis] >= upper[edge_axis] {
+                        continue;
+                    }
+                    if (sampled(source) < 0.0) == (sampled(end) < 0.0) {
+                        continue;
+                    }
                     let orth: Vec<_> = (0..3).filter(|a| *a != edge_axis).collect();
-                    let mut corners = [Cell { lower: [0; 3], stride: 1 }; 4];
-                    for (i, (u, v)) in [(-1, -1), (0, -1), (-1, 0), (0, 0)].into_iter().enumerate() {
+                    let mut corners = [Cell {
+                        lower: [0; 3],
+                        stride: 1,
+                    }; 4];
+                    for (i, (u, v)) in [(-1, -1), (0, -1), (-1, 0), (0, 0)].into_iter().enumerate()
+                    {
                         let mut fine_corner = source;
                         fine_corner[orth[0]] += u * stride;
                         fine_corner[orth[1]] += v * stride;
                         corners[i] = cell_for_fine_corner(
-                            fine_corner, border_axis, border_half, lower_stride, upper_stride,
+                            fine_corner,
+                            border_axis,
+                            border_half,
+                            lower_stride,
+                            upper_stride,
                         );
                     }
                     let triangles = [
@@ -95,11 +115,15 @@ fn reference_topology(
                     ];
                     for tri in triangles {
                         let distinct: HashSet<_> = tri.into_iter().collect();
-                        if distinct.len() != 3 { continue; }
+                        if distinct.len() != 3 {
+                            continue;
+                        }
                         triangle_count += 1;
                         let mixed = distinct.iter().any(|c| c.lower[border_axis] < border_half)
                             && distinct.iter().any(|c| c.lower[border_axis] >= border_half);
-                        if mixed { mixed_triangles += 1; }
+                        if mixed {
+                            mixed_triangles += 1;
+                        }
                         for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
                             let key = if a < b { (a, b) } else { (b, a) };
                             *topology.entry(key).or_insert(0) += 1;
@@ -119,8 +143,8 @@ fn reference_topology(
     for ((a, b), count) in topology {
         let interior = [a, b].iter().all(|cell| {
             (0..3).all(|axis| {
-                cell.lower[axis] >= lower[axis] + interior_margin &&
-                cell.lower[axis] + cell.stride < upper[axis] - interior_margin
+                cell.lower[axis] >= lower[axis] + interior_margin
+                    && cell.lower[axis] + cell.stride < upper[axis] - interior_margin
             })
         });
         if interior {
@@ -146,8 +170,10 @@ fn planar_dual_seams_are_manifold_at_two_to_one_transition() {
             println!("Adaptive Surface Nets plane: axis={axis} {low}:{high}, {report:?}");
             assert!(report.triangles > 0);
             assert!(report.internal_edges > 0);
-            assert_eq!(report.nonmanifold_internal_edges, 0,
-                "Adaptive dual seam has open/non-manifold internal edges");
+            assert_eq!(
+                report.nonmanifold_internal_edges, 0,
+                "Adaptive dual seam has open/non-manifold internal edges"
+            );
         }
     }
 }
@@ -156,14 +182,15 @@ fn planar_dual_seams_are_manifold_at_two_to_one_transition() {
 fn seeded_b1_surface_and_cave_dual_seams_are_manifold_at_two_to_one_transition() {
     for axis in 0..3 {
         for (low, high) in [(4, 2), (2, 4)] {
-            let report = reference_topology(axis, 0, low, high, |p| {
-                density_half(42, p[0], p[1], p[2])
-            });
+            let report =
+                reference_topology(axis, 0, low, high, |p| density_half(42, p[0], p[1], p[2]));
             println!("Adaptive Surface Nets SDF: axis={axis} {low}:{high}, {report:?}");
             assert!(report.triangles > 0);
             assert!(report.internal_edges > 0);
-            assert_eq!(report.nonmanifold_internal_edges, 0,
-                "B1 field has open/non-manifold internal dual contour edges");
+            assert_eq!(
+                report.nonmanifold_internal_edges, 0,
+                "B1 field has open/non-manifold internal dual contour edges"
+            );
         }
     }
 }
