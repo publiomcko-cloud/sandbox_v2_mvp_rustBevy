@@ -140,7 +140,8 @@ fn setup_b3_scene(
         } else {
             (1280, 720)
         };
-        let mut image = Image::new_target_texture(width, height, TextureFormat::Rgba8UnormSrgb, None);
+        let mut image =
+            Image::new_target_texture(width, height, TextureFormat::Rgba8UnormSrgb, None);
         image.asset_usage = RenderAssetUsages::RENDER_WORLD;
         let target = images.add(image);
         commands.insert_resource(B2HeadlessTarget(target.clone()));
