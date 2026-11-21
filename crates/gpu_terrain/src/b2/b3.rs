@@ -6,7 +6,7 @@
 //! three passes. The CPU does not synchronously wait for GPU completion.
 
 use super::{
-    B2HeadlessTarget, B2Pipelines, B2ResidentBuffers, BuildSdfMesh, PendingB2, b2_counts,
+    B2HeadlessTarget, B2Pipelines, B2ResidentBuffers, BuildSdfMesh, PendingB2, b3_mixed_counts,
     compute_b2, init_b2_pipelines, prepare_b2,
 };
 use bevy::{
@@ -23,8 +23,11 @@ use bevy::{
         renderer::RenderGraph,
     },
 };
-use sandbox_streaming::scheduler::{
-    BLOCKS_PER_FRAME, STREAM_LOD, StreamPlan, plan, within_retention,
+use sandbox_streaming::{
+    lod::{LodFrontier, SeamInfo, frontier, next_lod, seam_info},
+    scheduler::{
+        BLOCKS_PER_FRAME, STREAM_LOD, StreamPlan, block_distance_xz, plan, within_retention,
+    },
 };
 use sandbox_world_core::{BlockCoord, density::DensityGrid};
 use std::{
@@ -79,10 +82,22 @@ impl Plugin for GpuTerrainB3Plugin {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LodSpec {
+    lod: u8,
+    seam: SeamInfo,
+}
+
 struct ActiveBlock {
     mesh: Handle<Mesh>,
     entity: Entity,
     visible: bool,
+    spec: LodSpec,
+}
+
+struct PendingUpgrade {
+    block: ActiveBlock,
+    ready: bool,
 }
 
 #[derive(Resource, Default)]
@@ -100,6 +115,11 @@ struct StreamWorld {
     plan_refreshes: u64,
     baseline_scheduler: bool,
     cpu_samples_us: Vec<u32>,
+    mixed_lod: bool,
+    last_lod_epoch: u64,
+    transition_target: HashMap<BlockCoord, LodSpec>,
+    transition_pending: HashMap<BlockCoord, PendingUpgrade>,
+    transition_commits: u64,
 }
 
 fn setup_b3_scene(
@@ -109,6 +129,9 @@ fn setup_b3_scene(
     mut images: ResMut<Assets<Image>>,
 ) {
     state.baseline_scheduler = std::env::var("SANDBOX_B3_SCHEDULER").as_deref() == Ok("baseline");
+    // Mixed LOD is deliberately experimental until Vulkan seam and
+    // long-route visual gates pass. The B3 reference still defaults LOD2.
+    state.mixed_lod = std::env::var("SANDBOX_B3_MIXED_LOD").as_deref() == Ok("1");
     state.cpu_samples_us = Vec::with_capacity(60);
     state.material = Some(materials.add(StandardMaterial {
         base_color: Color::srgb(0.34, 0.59, 0.37),
@@ -156,6 +179,95 @@ fn setup_b3_scene(
     info!(
         "B3 streaming stage initialized: 130m horizon, 36m directional prefetch, uniform LOD2, 18m/s route optional"
     );
+}
+
+/// Assemble a GPU-resident allocation placeholder. Only the GPU compute
+/// pipeline writes true positions, normals, indices and transition quads.
+fn create_block(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    material: &Handle<StandardMaterial>,
+    coord: BlockCoord,
+    spec: LodSpec,
+) -> Option<ActiveBlock> {
+    let grid = DensityGrid::new(coord, spec.lod).ok()?;
+    let (vertex_count, index_count) =
+        b3_mixed_counts(grid, spec.seam.negative_face_mask);
+    let mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0_f32; 3]; vertex_count])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0_f32; 3]; vertex_count])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0_f32; 2]; vertex_count])
+    .with_inserted_indices(Indices::U32(vec![0_u32; index_count]));
+    let handle = meshes.add(mesh);
+    let entity = commands
+        .spawn((
+            BuildSdfMesh {
+                handle: handle.clone(),
+                grid,
+                seed: SEED,
+                seam_mask: spec.seam.negative_face_mask,
+                neighbor_lod_words: spec.seam.neighbor_words,
+            },
+            Mesh3d(handle.clone()),
+            MeshMaterial3d(material.clone()),
+            Visibility::Hidden,
+            Aabb::from_min_max(Vec3::splat(-2.1), Vec3::splat(16.1)),
+            Transform::from_xyz(
+                coord.x as f32 * 16.0,
+                coord.y as f32 * 16.0,
+                coord.z as f32 * 16.0,
+            ),
+        ))
+        .id();
+    Some(ActiveBlock {
+        mesh: handle,
+        entity,
+        visible: false,
+        spec,
+    })
+}
+
+/// A LOD update is a transaction: keep the old visible topology until all
+/// new GPU-resident meshes in this neighborhood are ready. Direct-face AND
+/// diagonal 3x3x3 dependencies are grouped so packed seam LODs and neighbor
+/// geometry cannot publish at incompatible revisions.
+fn connected_ready_components(
+    target: &HashMap<BlockCoord, LodSpec>,
+    pending: &HashMap<BlockCoord, PendingUpgrade>,
+) -> Vec<Vec<BlockCoord>> {
+    let mut remaining: HashSet<BlockCoord> = target.keys().copied().collect();
+    let mut ready = Vec::new();
+    while let Some(first) = remaining.iter().copied().next() {
+        remaining.remove(&first);
+        let mut group = vec![first];
+        let mut at = 0;
+        while at < group.len() {
+            let current = group[at];
+            at += 1;
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    for dz in -1..=1 {
+                        if dx == 0 && dy == 0 && dz == 0 { continue; }
+                        let neighbor = BlockCoord {
+                            x: current.x + dx,
+                            y: current.y + dy,
+                            z: current.z + dz,
+                        };
+                        if remaining.remove(&neighbor) {
+                            group.push(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+        if group.iter().all(|coord| pending.get(coord).is_some_and(|p| p.ready)) {
+            ready.push(group);
+        }
+    }
+    ready
 }
 
 fn stream_b3(
@@ -206,13 +318,41 @@ fn stream_b3(
         state.plan_refreshes += 1;
     }
 
-    // New meshes were submitted to GPU by a previous render-graph pass.
-    // Bevy's draw only sees them on a later frame, after their compute dispatch.
+    // The readiness set is produced by the render graph after GPU dispatch.
+    // Existing LOD2 meshes stay drawn until the new geometry is ready.
     if let Ok(mut dispatched) = ready.0.lock() {
         for block in state.blocks.values_mut() {
             if !block.visible && dispatched.remove(&block.mesh.id()) {
                 commands.entity(block.entity).insert(Visibility::Visible);
                 block.visible = true;
+            }
+        }
+        for replacement in state.transition_pending.values_mut() {
+            if !replacement.ready && dispatched.remove(&replacement.block.mesh.id()) {
+                replacement.ready = true;
+            }
+        }
+    }
+
+    if state.mixed_lod && !state.transition_target.is_empty() {
+        let cohorts = connected_ready_components(
+            &state.transition_target,
+            &state.transition_pending,
+        );
+        for cohort in cohorts {
+            for coord in cohort {
+                let Some(mut replacement) = state.transition_pending.remove(&coord) else {
+                    continue;
+                };
+                state.transition_target.remove(&coord);
+                if let Some(old) = state.blocks.remove(&coord) {
+                    commands.entity(old.entity).despawn();
+                    meshes.remove(old.mesh.id());
+                }
+                commands.entity(replacement.block.entity).insert(Visibility::Visible);
+                replacement.block.visible = true;
+                state.blocks.insert(coord, replacement.block);
+                state.transition_commits += 1;
             }
         }
     }
@@ -235,7 +375,47 @@ fn stream_b3(
                     set.remove(&old.mesh.id());
                 }
                 state.evictions += 1;
+                if let Some(obsolete) = state.transition_pending.remove(&key) {
+                    commands.entity(obsolete.block.entity).despawn();
+                    meshes.remove(obsolete.block.mesh.id());
+                }
+                state.transition_target.remove(&key);
             }
+        }
+    }
+
+    // Compute a stable three-tier update once the mandatory ring is
+    // actually resident and no previous mixed-LOD transaction is pending.
+    // Initial generation stays at welded uniform LOD2, avoiding seams
+    // against unloaded/unfinished neighboring blocks.
+    if state.mixed_lod
+        && state.transition_target.is_empty()
+        && state.frame >= 180
+        && state.frame.saturating_sub(state.last_lod_epoch) >= 60
+    {
+        let audit = plan(pos, direction);
+        let all_required_visible = audit.required.iter().all(|coord| {
+            state.blocks.get(coord).is_some_and(|block| block.visible)
+        });
+        if all_required_visible {
+            let mut levels = HashMap::new();
+            for (&coord, block) in &state.blocks {
+                let distance = block_distance_xz(pos, coord);
+                levels.insert(coord, next_lod(block.spec.lod, distance));
+            }
+            let mut desired = HashMap::new();
+            for (&coord, block) in &state.blocks {
+                let lod = levels[&coord];
+                let spec = LodSpec {
+                    lod,
+                    seam: seam_info(coord, &levels),
+                };
+                if block.spec != spec {
+                    desired.insert(coord, spec);
+                }
+            }
+            state.last_lod_epoch = state.frame;
+            state.transition_target = desired;
         }
     }
 
@@ -259,53 +439,58 @@ fn stream_b3(
         if state.blocks.contains_key(&coord) {
             continue;
         }
-        let Ok(grid) = DensityGrid::new(coord, STREAM_LOD) else {
-            error!(?coord, "B3 block outside GPU SDF numeric range");
-            continue;
+        // New blocks enter as the known-good uniform LOD2 surface; the
+        // three-tier adaptive replacement happens transactionally later.
+        let spec = LodSpec {
+            lod: STREAM_LOD,
+            seam: SeamInfo::default(),
         };
-        let (vertex_count, index_count) = b2_counts(grid);
-        let mesh = Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0_f32; 3]; vertex_count])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0_f32; 3]; vertex_count])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0_f32; 2]; vertex_count])
-        .with_inserted_indices(Indices::U32(vec![0_u32; index_count]));
-        let handle = meshes.add(mesh);
-        let entity = commands
-            .spawn((
-                BuildSdfMesh {
-                    handle: handle.clone(),
-                    grid,
-                    seed: SEED,
-                    seam_mask: 0,
-                    neighbor_lod_words: [0; 2],
-                },
-                Mesh3d(handle.clone()),
-                MeshMaterial3d(material.clone()),
-                Visibility::Hidden,
-                // The GPU may emit vertices one LOD2 cell (2m) beyond the
-                // low block face. This manual bound replaces the zero-filled
-                // placeholder mesh AABB and allows correct frustum culling.
-                Aabb::from_min_max(Vec3::splat(-2.1), Vec3::splat(16.1)),
-                Transform::from_xyz(
-                    coord.x as f32 * 16.0,
-                    coord.y as f32 * 16.0,
-                    coord.z as f32 * 16.0,
-                ),
-            ))
-            .id();
-        state.blocks.insert(
+        if let Some(created) = create_block(
+            &mut commands,
+            &mut meshes,
+            &material,
             coord,
-            ActiveBlock {
-                mesh: handle,
-                entity,
-                visible: false,
-            },
-        );
-        new_count += 1;
-        state.dispatches += 1;
+            spec,
+        ) {
+            state.blocks.insert(coord, created);
+            new_count += 1;
+            state.dispatches += 1;
+        } else {
+            error!(?coord, "B3 block outside SDF numeric domain");
+        }
+    }
+
+    // Generate up to the remainder of the same CPU/GPU frame budget as
+    // replacement chunks. Old geometry persists until every dependent
+    // chunk in a connected 3x3x3 cohort has completed GPU extraction.
+    if state.mixed_lod && new_count < limit {
+        let mut coords: Vec<_> = state.transition_target.keys().copied().collect();
+        coords.sort_by_key(|c| (c.x, c.y, c.z));
+        for coord in coords {
+            if new_count >= limit {
+                break;
+            }
+            if state.transition_pending.contains_key(&coord)
+                || !state.blocks.contains_key(&coord)
+            {
+                continue;
+            }
+            let spec = state.transition_target[&coord];
+            if let Some(created) = create_block(
+                &mut commands,
+                &mut meshes,
+                &material,
+                coord,
+                spec,
+            ) {
+                state.transition_pending.insert(coord, PendingUpgrade {
+                    block: created,
+                    ready: false,
+                });
+                new_count += 1;
+                state.dispatches += 1;
+            }
+        }
     }
 
     let elapsed_us = cpu_start.elapsed().as_micros().min(u32::MAX as u128) as u32;
@@ -339,6 +524,10 @@ fn stream_b3(
             cpu_avg_us,
             replans = state.plan_refreshes,
             baseline_scheduler = state.baseline_scheduler,
+            mixed_lod = state.mixed_lod,
+            transition_pending = state.transition_pending.len(),
+            transition_queued = state.transition_target.len(),
+            transition_commits = state.transition_commits,
             "B3 horizon coverage (130m, two vertical layers, GPU mesh ready)"
         );
         if required > visible {
