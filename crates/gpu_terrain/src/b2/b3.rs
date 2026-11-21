@@ -24,16 +24,21 @@ use bevy::{
     },
 };
 use sandbox_streaming::scheduler::{
-    BLOCKS_PER_FRAME, STREAM_LOD, block_distance_xz, plan, within_retention,
+    BLOCKS_PER_FRAME, STREAM_LOD, StreamPlan, plan, within_retention,
 };
 use sandbox_world_core::{BlockCoord, density::DensityGrid};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 const SEED: u32 = 42;
 const MAX_RESIDENT_BLOCKS: usize = 1100;
+const OPTIMIZED_BLOCKS_PER_FRAME: usize = 5;
+const PLAN_UPDATE_DISTANCE_M: f32 = 1.5;
+const PLAN_UPDATE_MAX_AGE_FRAMES: u64 = 12;
+const DIRECTION_COSINE_THRESHOLD: f32 = 0.96;
 
 /// MainWorld ↔ RenderWorld: renderer inserts IDs after all compute passes
 /// have been encoded. MainWorld consumes readiness on a subsequent frame.
@@ -88,6 +93,13 @@ struct StreamWorld {
     frame: u64,
     dispatches: u64,
     evictions: u64,
+    cached_plan: Option<StreamPlan>,
+    plan_position: Vec3,
+    plan_direction: Vec2,
+    plan_frame: u64,
+    plan_refreshes: u64,
+    baseline_scheduler: bool,
+    cpu_samples_us: Vec<u32>,
 }
 
 fn setup_b3_scene(
@@ -96,6 +108,9 @@ fn setup_b3_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    state.baseline_scheduler =
+        std::env::var("SANDBOX_B3_SCHEDULER").as_deref() == Ok("baseline");
+    state.cpu_samples_us = Vec::with_capacity(60);
     state.material = Some(materials.add(StandardMaterial {
         base_color: Color::srgb(0.34, 0.59, 0.37),
         perceptual_roughness: 0.9,
@@ -145,6 +160,7 @@ fn stream_b3(
     mut state: ResMut<StreamWorld>,
     ready: Res<B3ReadySet>,
 ) {
+    let cpu_start = Instant::now();
     let Some(transform) = camera.iter().next() else {
         return;
     };
@@ -165,7 +181,26 @@ fn stream_b3(
     state.previous_position = Some(position);
     state.frame += 1;
 
-    let target = plan(pos, direction);
+    // A 130m ring does not need 360 degree replanning on every 16ms
+    // frame. Refresh after 1.5m / 12 frames / an appreciable turn.
+    // Required coverage is still audited from the CURRENT camera
+    // position once per second, rather than trusting the cached plan.
+    let direction2 = Vec2::new(direction[0], direction[1]).normalize_or_zero();
+    let moved = (position.xz() - state.plan_position.xz()).length();
+    let heading_changed = state.plan_direction.dot(direction2)
+        < DIRECTION_COSINE_THRESHOLD;
+    let should_refresh = state.baseline_scheduler
+        || state.cached_plan.is_none()
+        || moved >= PLAN_UPDATE_DISTANCE_M
+        || state.frame.saturating_sub(state.plan_frame) >= PLAN_UPDATE_MAX_AGE_FRAMES
+        || heading_changed;
+    if should_refresh {
+        state.cached_plan = Some(plan(pos, direction));
+        state.plan_position = position;
+        state.plan_direction = direction2;
+        state.plan_frame = state.frame;
+        state.plan_refreshes += 1;
+    }
 
     // New meshes were submitted to GPU by a previous render-graph pass.
     // Bevy's draw only sees them on a later frame, after their compute dispatch.
@@ -178,22 +213,25 @@ fn stream_b3(
         }
     }
 
-    // Eviction only outside the larger retained radius. A missing newly
-    // requested block can never evict an old still-visible required block.
-    let stale: Vec<_> = state
-        .blocks
-        .keys()
-        .copied()
-        .filter(|c| !within_retention(pos, *c))
-        .collect();
-    for key in stale {
-        if let Some(old) = state.blocks.remove(&key) {
-            commands.entity(old.entity).despawn();
-            meshes.remove(old.mesh.id());
-            if let Ok(mut set) = ready.0.lock() {
-                set.remove(&old.mesh.id());
+    // Eviction is amortized on replanning frames, rather than scanning
+    // ~800 resident mesh handles 60 times per second. The retention ring
+    // is still 52 m larger than the mandatory 130 m horizon.
+    if should_refresh {
+        let stale: Vec<_> = state
+            .blocks
+            .keys()
+            .copied()
+            .filter(|c| !within_retention(pos, *c))
+            .collect();
+        for key in stale {
+            if let Some(old) = state.blocks.remove(&key) {
+                commands.entity(old.entity).despawn();
+                meshes.remove(old.mesh.id());
+                if let Ok(mut set) = ready.0.lock() {
+                    set.remove(&old.mesh.id());
+                }
+                state.evictions += 1;
             }
-            state.evictions += 1;
         }
     }
 
@@ -202,15 +240,21 @@ fn stream_b3(
         .as_ref()
         .expect("B3 material not initialized")
         .clone();
+    let limit = if state.baseline_scheduler {
+        BLOCKS_PER_FRAME
+    } else {
+        OPTIMIZED_BLOCKS_PER_FRAME
+    };
     let mut new_count = 0_usize;
-    for candidate in &target.targets {
-        if state.blocks.contains_key(&candidate.coord) {
-            continue;
-        }
-        if new_count >= BLOCKS_PER_FRAME || state.blocks.len() >= MAX_RESIDENT_BLOCKS {
+    let target_count = state.cached_plan.as_ref().expect("B3 plan").targets.len();
+    for index in 0..target_count {
+        if new_count >= limit || state.blocks.len() >= MAX_RESIDENT_BLOCKS {
             break;
         }
-        let coord = candidate.coord;
+        let coord = state.cached_plan.as_ref().expect("B3 plan").targets[index].coord;
+        if state.blocks.contains_key(&coord) {
+            continue;
+        }
         let Ok(grid) = DensityGrid::new(coord, STREAM_LOD) else {
             error!(?coord, "B3 block outside GPU SDF numeric range");
             continue;
@@ -258,13 +302,22 @@ fn stream_b3(
         state.dispatches += 1;
     }
 
+    let elapsed_us = cpu_start.elapsed().as_micros().min(u32::MAX as u128) as u32;
+    state.cpu_samples_us.push(elapsed_us);
     if state.frame % 60 == 0 {
-        let required = target.required.len();
-        let visible = target
+        // This is deliberately a fresh plan. All reported required/missing
+        // counts match the actual current position, not a cached origin.
+        let audit = plan(pos, direction);
+        let required = audit.required.len();
+        let visible = audit
             .required
             .iter()
             .filter(|c| state.blocks.get(c).is_some_and(|b| b.visible))
             .count();
+        let cpu_max_us = state.cpu_samples_us.iter().copied().max().unwrap_or(0);
+        let cpu_avg_us = state.cpu_samples_us.iter().map(|x| *x as u64).sum::<u64>()
+            / state.cpu_samples_us.len().max(1) as u64;
+        state.cpu_samples_us.clear();
         info!(
             required,
             visible,
@@ -276,6 +329,10 @@ fn stream_b3(
             x = position.x,
             y = position.y,
             z = position.z,
+            cpu_max_us,
+            cpu_avg_us,
+            replans = state.plan_refreshes,
+            baseline_scheduler = state.baseline_scheduler,
             "B3 horizon coverage (130m, two vertical layers, GPU mesh ready)"
         );
         if required > visible {
