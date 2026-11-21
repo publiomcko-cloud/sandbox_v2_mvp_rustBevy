@@ -178,9 +178,9 @@ fn index_slot(face: u32, local_slot: u32) -> u32 {
     return rank * (2u * 32u * 32u) + local_slot;
 }
 
-// All transition faces are sampled at fine LOD0 (0.5m) to cover
-// corners where two 2:1 fronts intersect. Same-cell duplicates are
-// intentionally zero-area triangles, mirroring adaptive dual contouring.
+// Every transition face is sampled at its finer PARTICIPATING LOD.
+// The fixed 32x32 slot grid allows LOD0/1 and LOD1/2 without changing
+// dispatch size; non-aligned slots remain degenerate triangles.
 @compute @workgroup_size(64)
 fn emit_transition(@builtin(global_invocation_id) gid: vec3<u32>) {
     let candidate = gid.x;
@@ -197,6 +197,17 @@ fn emit_transition(@builtin(global_invocation_id) gid: vec3<u32>) {
     let v = i32(uv / N);
 
     let base = vec3i(p.base_x, p.base_y, p.base_z);
+    var previous = base;
+    previous[face] -= 1;
+    let own_lod = lod_at_cell(base);
+    let other_lod = lod_at_cell(previous);
+    let fine_step = 1i << u32(min(own_lod, other_lod));
+    // A 2:1 seam must use the finer *participating* grid, not
+    // arbitrary LOD0 samples on a LOD1/2 boundary.
+    if ((u % fine_step) != 0 || (v % fine_step) != 0 ||
+        u + fine_step > i32(N) || v + fine_step > i32(N)) {
+        return;
+    }
     var start = base;
     var edge_axis = 0u;
     if (face == 0u) {
@@ -236,9 +247,9 @@ fn emit_transition(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 
     var end = start;
-    if (edge_axis == 0u) { end.x += 1; }
-    else if (edge_axis == 1u) { end.y += 1; }
-    else { end.z += 1; }
+    if (edge_axis == 0u) { end.x += fine_step; }
+    else if (edge_axis == 1u) { end.y += fine_step; }
+    else { end.z += fine_step; }
     let da = density_half(p.seed, start.x, start.y, start.z);
     let db = density_half(p.seed, end.x, end.y, end.z);
     if ((da < 0.0) == (db < 0.0)) { return; }
@@ -248,14 +259,14 @@ fn emit_transition(@builtin(global_invocation_id) gid: vec3<u32>) {
         let b = ((k >> 1u) & 1u) == 0u;
         var lower = start;
         if (edge_axis == 0u) {
-            if (a) { lower.y -= 1; }
-            if (b) { lower.z -= 1; }
+            if (a) { lower.y -= fine_step; }
+            if (b) { lower.z -= fine_step; }
         } else if (edge_axis == 1u) {
-            if (a) { lower.x -= 1; }
-            if (b) { lower.z -= 1; }
+            if (a) { lower.x -= fine_step; }
+            if (b) { lower.z -= fine_step; }
         } else {
-            if (a) { lower.x -= 1; }
-            if (b) { lower.y -= 1; }
+            if (a) { lower.x -= fine_step; }
+            if (b) { lower.y -= fine_step; }
         }
         let dual = dual_at(lower);
         let offset = vertex_offset + k * 8u;
