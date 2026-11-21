@@ -108,6 +108,7 @@ pub fn frontier(plan: &StreamPlan, pos: [f32; 3]) -> LodFrontier {
 /// A transition is owned by the block on the POSITIVE side of each face.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SeamInfo {
+    // Compact shader mask: bit0=-X, bit1=-Y, bit2=-Z (NOT the six-face bits).
     pub negative_face_mask: u32,
     pub neighbor_words: [u32; 2],
 }
@@ -168,7 +169,7 @@ mod tests {
         let seam = seam_info(center, &lods);
         assert_eq!(
             seam.negative_face_mask,
-            FACE_NEG_X as u32 | FACE_NEG_Z as u32
+            0b101u32
         );
         for z in 0..3 {
             for y in 0..3 {
