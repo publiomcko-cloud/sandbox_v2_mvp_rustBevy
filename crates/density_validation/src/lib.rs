@@ -6,3 +6,6 @@ mod validation;
 
 #[cfg(test)]
 mod b2_extraction;
+
+#[cfg(test)]
+mod b3_transition_gpu;
