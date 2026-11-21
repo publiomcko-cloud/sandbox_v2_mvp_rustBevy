@@ -167,10 +167,7 @@ mod tests {
         lods.insert(BlockCoord { z: 8, ..center }, 0);
         lods.insert(BlockCoord { x: 8, ..center }, 2);
         let seam = seam_info(center, &lods);
-        assert_eq!(
-            seam.negative_face_mask,
-            0b101u32
-        );
+        assert_eq!(seam.negative_face_mask, 0b101u32);
         for z in 0..3 {
             for y in 0..3 {
                 for x in 0..3 {
