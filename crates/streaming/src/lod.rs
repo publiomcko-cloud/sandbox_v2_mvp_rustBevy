@@ -104,10 +104,87 @@ pub fn frontier(plan: &StreamPlan, pos: [f32; 3]) -> LodFrontier {
     }
 }
 
+/// GPU-side neighborhood packed into the last two u32 words of B2Params.
+/// A transition is owned by the block on the POSITIVE side of each face.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SeamInfo {
+    pub negative_face_mask: u32,
+    pub neighbor_words: [u32; 2],
+}
+
+pub fn seam_info(block: BlockCoord, lods: &HashMap<BlockCoord, u8>) -> SeamInfo {
+    let Some(&own_lod) = lods.get(&block) else {
+        return SeamInfo::default();
+    };
+    let mut mask = 0u32;
+    for (axis, delta) in [(0, [-1, 0, 0]), (1, [0, -1, 0]), (2, [0, 0, -1])] {
+        let neighbor = BlockCoord {
+            x: block.x + delta[0],
+            y: block.y + delta[1],
+            z: block.z + delta[2],
+        };
+        if lods.get(&neighbor).is_some_and(|other| *other != own_lod) {
+            mask |= 1u32 << axis;
+        }
+    }
+
+    if mask == 0 {
+        return SeamInfo::default();
+    }
+    let mut words = [0u32; 2];
+    for z in 0..3 {
+        for y in 0..3 {
+            for x in 0..3 {
+                let neighbor = BlockCoord {
+                    x: block.x + x as i64 - 1,
+                    y: block.y + y as i64 - 1,
+                    z: block.z + z as i64 - 1,
+                };
+                let lod = u32::from(*lods.get(&neighbor).unwrap_or(&own_lod));
+                let bit = ((z * 9 + y * 3 + x) * 2) as u32;
+                words[(bit / 32) as usize] |= (lod & 3) << (bit % 32);
+            }
+        }
+    }
+    SeamInfo {
+        negative_face_mask: mask,
+        neighbor_words: words,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::scheduler::plan;
+
+    #[test]
+    fn packed_gpu_lod_neighborhood_and_negative_face_ownership() {
+        let center = BlockCoord { x: 7, y: -1, z: 9 };
+        let mut lods = HashMap::new();
+        lods.insert(center, 1);
+        lods.insert(BlockCoord { x: 6, ..center }, 2);
+        lods.insert(BlockCoord { z: 8, ..center }, 0);
+        lods.insert(BlockCoord { x: 8, ..center }, 2);
+        let seam = seam_info(center, &lods);
+        assert_eq!(seam.negative_face_mask, FACE_NEG_X as u32 | FACE_NEG_Z as u32);
+        for z in 0..3 {
+            for y in 0..3 {
+                for x in 0..3 {
+                    let point = BlockCoord {
+                        x: center.x + x as i64 - 1,
+                        y: center.y + y as i64 - 1,
+                        z: center.z + z as i64 - 1,
+                    };
+                    let expected = u32::from(*lods.get(&point).unwrap_or(&1));
+                    let bit = ((z * 9 + y * 3 + x) * 2) as u32;
+                    let word = seam.neighbor_words[(bit / 32) as usize];
+                    assert_eq!((word >> (bit % 32)) & 3, expected);
+                }
+            }
+        }
+        assert_eq!(seam_info(BlockCoord { x: 8, ..center }, &lods).negative_face_mask, FACE_NEG_X as u32);
+        assert_eq!(seam_info(BlockCoord { x: 99, ..center }, &lods), SeamInfo::default());
+    }
 
     #[test]
     fn range_tiers_and_hysteresis() {
