@@ -22,8 +22,15 @@ fn b3_adaptive_transition_shader_parses_and_validates() {
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::all(),
     );
-    validator.validate(&module).expect("B3 adaptive dual WGSL validation failed");
-    assert!(module.entry_points.iter().any(|e| e.name == "emit_transition"));
+    validator
+        .validate(&module)
+        .expect("B3 adaptive dual WGSL validation failed");
+    assert!(
+        module
+            .entry_points
+            .iter()
+            .any(|e| e.name == "emit_transition")
+    );
 }
 
 #[test]
