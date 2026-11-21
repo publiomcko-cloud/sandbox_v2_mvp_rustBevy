@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::sync::OnceLock;
 
 const HORIZONTAL_SPEED_MPS: f32 = 18.0;
 
@@ -8,7 +9,20 @@ pub fn fly_camera(
     time: Res<Time>,
     mut cameras: Query<&mut Transform, With<Camera3d>>,
 ) {
+    // Deterministic 18m/s route for B3 self-hosted headless smoke.
+    // Warm up the full 130m ring first; never auto-pause to hide gaps.
+    static B3_AUTOROUTE: OnceLock<bool> = OnceLock::new();
+    let automated = *B3_AUTOROUTE.get_or_init(|| {
+        std::env::var("SANDBOX_STAGE").as_deref() == Ok("B3")
+            && std::env::var("SANDBOX_B3_ROUTE").as_deref() == Ok("straight")
+    });
     let mut velocity = Vec3::ZERO;
+    if automated && time.elapsed_secs() >= 5.0 {
+        for mut transform in &mut cameras {
+            transform.translation.x += HORIZONTAL_SPEED_MPS * time.delta_secs();
+        }
+        return;
+    }
 
     if keys.pressed(KeyCode::KeyW) {
         velocity.z -= 1.0;

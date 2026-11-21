@@ -5323,12 +5323,16 @@ name = "sandbox-gpu-terrain"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "sandbox-streaming",
  "sandbox-world-core",
 ]
 
 [[package]]
 name = "sandbox-streaming"
 version = "0.1.0"
+dependencies = [
+ "sandbox-world-core",
+]
 
 [[package]]
 name = "sandbox-world-core"

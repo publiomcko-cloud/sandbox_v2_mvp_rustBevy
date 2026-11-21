@@ -1,5 +1,7 @@
 //! Testable publication-generation invariant; GPU synchronization arrives in B3.
 
+pub mod scheduler;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildToken {
     generation: u64,

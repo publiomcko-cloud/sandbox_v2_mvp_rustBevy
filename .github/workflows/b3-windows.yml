@@ -1,0 +1,94 @@
+name: B3 Windows gated check and GPU streaming Release
+
+on:
+  push:
+    branches:
+      - 'feat/b3-*'
+    paths-ignore:
+      - 'scripts/capture-b3-ci.ps1'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-windows-preflight-gated
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        shell: pwsh
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+      - name: Format gate
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: Compile full Bevy B3 runtime before expensive Release
+        shell: pwsh
+        run: cargo check --locked -p sandbox-game
+      - name: Streaming contract regression
+        shell: pwsh
+        run: cargo test --locked -p sandbox-streaming
+
+  release:
+    needs: check
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        shell: pwsh
+        run: rustup toolchain install 1.100.0 --profile minimal --no-self-update
+      - name: Release
+        shell: pwsh
+        run: cargo build --release --locked -p sandbox-game
+      - name: Package binary and GPU shaders
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/b3/assets | Out-Null
+          Copy-Item target/release/sandbox-game.exe dist/b3/sandbox-game.exe
+          Copy-Item assets/shaders dist/b3/assets/shaders -Recurse -Force
+          Copy-Item Cargo.lock dist/b3/Cargo.lock
+          foreach ($p in @("dist/b3/sandbox-game.exe", "dist/b3/assets/shaders/sdf_density.wgsl", "dist/b3/assets/shaders/surface_nets.wgsl")) {
+            if (-not (Test-Path $p)) { throw "Missing B3 asset: $p" }
+          }
+      - name: Upload self-contained Windows B3
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-windows-gpu-streaming
+          path: dist/b3/
+          if-no-files-found: error
+
+  visual:
+    needs: release
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download tested B3 Release
+        uses: actions/download-artifact@v4
+        with:
+          name: b3-windows-gpu-streaming
+          path: b3-runtime
+      - name: Run B3 deterministic 18m/s headless Vulkan route
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\scripts\capture-b3-ci.ps1"
+      - name: Upload B3 visual and telemetry evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-streaming-route-report
+          path: b3-visual-report/
+          if-no-files-found: warn

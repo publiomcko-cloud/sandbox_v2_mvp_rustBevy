@@ -1,4 +1,4 @@
-//! B2: onscreen Bevy terrain, or headless GPU target for Windows service CI.
+//! B3 opt-in streaming; B2 remains a separate GPU-resident reference checkpoint.
 mod player;
 mod visual_capture;
 
@@ -11,14 +11,23 @@ use bevy::{
     window::ExitCondition,
     winit::WinitPlugin,
 };
-use sandbox_gpu_terrain::{GpuTerrainBootstrapPlugin, b2::GpuTerrainB2Plugin};
+use sandbox_gpu_terrain::{
+    GpuTerrainBootstrapPlugin,
+    b2::{GpuTerrainB2Plugin, b3::GpuTerrainB3Plugin},
+};
 use std::time::Duration;
 
 fn main() {
-    let b0 = std::env::var("SANDBOX_STAGE").is_ok_and(|value| value.eq_ignore_ascii_case("B0"));
-    let headless = !b0 && std::env::var("SANDBOX_B2_HEADLESS").as_deref() == Ok("1");
+    let stage = std::env::var("SANDBOX_STAGE").unwrap_or_default();
+    let b0 = stage.eq_ignore_ascii_case("B0");
+    let b3 = stage.eq_ignore_ascii_case("B3");
+    let headless = !b0
+        && (std::env::var("SANDBOX_B2_HEADLESS").as_deref() == Ok("1")
+            || std::env::var("SANDBOX_B3_HEADLESS").as_deref() == Ok("1"));
     let title = if b0 {
         "Sandbox V2 - Rust/Bevy B0 GPU bootstrap"
+    } else if b3 {
+        "Sandbox V2 - B3 130m GPU streaming (uniform LOD2)"
     } else {
         "Sandbox V2 - B2 GPU Surface Nets SDF terrain"
     };
@@ -62,6 +71,8 @@ fn main() {
     ));
     if b0 {
         app.add_plugins(GpuTerrainBootstrapPlugin);
+    } else if b3 {
+        app.add_plugins(GpuTerrainB3Plugin);
     } else {
         app.add_plugins(GpuTerrainB2Plugin);
     }
