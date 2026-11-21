@@ -354,7 +354,8 @@ fn compute_b2(
         cache.get_compute_pipeline(pipelines.vertices),
         cache.get_compute_pipeline(pipelines.indices),
         cache.get_compute_pipeline(pipelines.transition),
-    ) else {
+    )
+    else {
         return;
     };
 

@@ -191,8 +191,7 @@ fn create_block(
     spec: LodSpec,
 ) -> Option<ActiveBlock> {
     let grid = DensityGrid::new(coord, spec.lod).ok()?;
-    let (vertex_count, index_count) =
-        b3_mixed_counts(grid, spec.seam.negative_face_mask);
+    let (vertex_count, index_count) = b3_mixed_counts(grid, spec.seam.negative_face_mask);
     let mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -250,7 +249,9 @@ fn connected_ready_components(
             for dx in -1..=1 {
                 for dy in -1..=1 {
                     for dz in -1..=1 {
-                        if dx == 0 && dy == 0 && dz == 0 { continue; }
+                        if dx == 0 && dy == 0 && dz == 0 {
+                            continue;
+                        }
                         let neighbor = BlockCoord {
                             x: current.x + dx,
                             y: current.y + dy,
@@ -263,7 +264,10 @@ fn connected_ready_components(
                 }
             }
         }
-        if group.iter().all(|coord| pending.get(coord).is_some_and(|p| p.ready)) {
+        if group
+            .iter()
+            .all(|coord| pending.get(coord).is_some_and(|p| p.ready))
+        {
             ready.push(group);
         }
     }
@@ -335,10 +339,8 @@ fn stream_b3(
     }
 
     if state.mixed_lod && !state.transition_target.is_empty() {
-        let cohorts = connected_ready_components(
-            &state.transition_target,
-            &state.transition_pending,
-        );
+        let cohorts =
+            connected_ready_components(&state.transition_target, &state.transition_pending);
         for cohort in cohorts {
             for coord in cohort {
                 let Some(mut replacement) = state.transition_pending.remove(&coord) else {
@@ -349,7 +351,9 @@ fn stream_b3(
                     commands.entity(old.entity).despawn();
                     meshes.remove(old.mesh.id());
                 }
-                commands.entity(replacement.block.entity).insert(Visibility::Visible);
+                commands
+                    .entity(replacement.block.entity)
+                    .insert(Visibility::Visible);
                 replacement.block.visible = true;
                 state.blocks.insert(coord, replacement.block);
                 state.transition_commits += 1;
@@ -394,9 +398,10 @@ fn stream_b3(
         && state.frame.saturating_sub(state.last_lod_epoch) >= 60
     {
         let audit = plan(pos, direction);
-        let all_required_visible = audit.required.iter().all(|coord| {
-            state.blocks.get(coord).is_some_and(|block| block.visible)
-        });
+        let all_required_visible = audit
+            .required
+            .iter()
+            .all(|coord| state.blocks.get(coord).is_some_and(|block| block.visible));
         if all_required_visible {
             let mut levels = HashMap::new();
             for (&coord, block) in &state.blocks {
@@ -445,13 +450,7 @@ fn stream_b3(
             lod: STREAM_LOD,
             seam: SeamInfo::default(),
         };
-        if let Some(created) = create_block(
-            &mut commands,
-            &mut meshes,
-            &material,
-            coord,
-            spec,
-        ) {
+        if let Some(created) = create_block(&mut commands, &mut meshes, &material, coord, spec) {
             state.blocks.insert(coord, created);
             new_count += 1;
             state.dispatches += 1;
@@ -470,23 +469,19 @@ fn stream_b3(
             if new_count >= limit {
                 break;
             }
-            if state.transition_pending.contains_key(&coord)
-                || !state.blocks.contains_key(&coord)
-            {
+            if state.transition_pending.contains_key(&coord) || !state.blocks.contains_key(&coord) {
                 continue;
             }
             let spec = state.transition_target[&coord];
-            if let Some(created) = create_block(
-                &mut commands,
-                &mut meshes,
-                &material,
-                coord,
-                spec,
-            ) {
-                state.transition_pending.insert(coord, PendingUpgrade {
-                    block: created,
-                    ready: false,
-                });
+            if let Some(created) = create_block(&mut commands, &mut meshes, &material, coord, spec)
+            {
+                state.transition_pending.insert(
+                    coord,
+                    PendingUpgrade {
+                        block: created,
+                        ready: false,
+                    },
+                );
                 new_count += 1;
                 state.dispatches += 1;
             }

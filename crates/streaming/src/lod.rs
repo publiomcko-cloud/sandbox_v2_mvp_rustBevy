@@ -166,7 +166,10 @@ mod tests {
         lods.insert(BlockCoord { z: 8, ..center }, 0);
         lods.insert(BlockCoord { x: 8, ..center }, 2);
         let seam = seam_info(center, &lods);
-        assert_eq!(seam.negative_face_mask, FACE_NEG_X as u32 | FACE_NEG_Z as u32);
+        assert_eq!(
+            seam.negative_face_mask,
+            FACE_NEG_X as u32 | FACE_NEG_Z as u32
+        );
         for z in 0..3 {
             for y in 0..3 {
                 for x in 0..3 {
@@ -182,8 +185,14 @@ mod tests {
                 }
             }
         }
-        assert_eq!(seam_info(BlockCoord { x: 8, ..center }, &lods).negative_face_mask, FACE_NEG_X as u32);
-        assert_eq!(seam_info(BlockCoord { x: 99, ..center }, &lods), SeamInfo::default());
+        assert_eq!(
+            seam_info(BlockCoord { x: 8, ..center }, &lods).negative_face_mask,
+            FACE_NEG_X as u32
+        );
+        assert_eq!(
+            seam_info(BlockCoord { x: 99, ..center }, &lods),
+            SeamInfo::default()
+        );
     }
 
     #[test]
