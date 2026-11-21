@@ -6,6 +6,7 @@ on:
       - 'research/b3-adaptive-dual-*'
     paths:
       - 'crates/density_validation/src/b3_transition_gpu.rs'
+      - 'assets/shaders/lod_transition.wgsl'
       - '.github/workflows/b3-adaptive-vulkan.yml'
   workflow_dispatch:
 
