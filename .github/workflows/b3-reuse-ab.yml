@@ -1,0 +1,44 @@
+name: B3 corrected GPU A/B from pinned Release
+
+on:
+  push:
+    branches:
+      - 'diag/b3-corrected-ab-20261121'
+    paths:
+      - 'scripts/b3-ab-perf-ci.ps1'
+      - '.github/workflows/b3-reuse-ab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: b3-corrected-ab
+  cancel-in-progress: true
+
+jobs:
+  corrected-ab:
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse previously compiled reference Release (no rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: b3-exp-framebudget-release
+          path: b3-runtime
+          run-id: 44905788102
+          github-token: ${{ github.token }}
+      - name: Execute corrected 18m/s 1080p Vulkan A/B
+        shell: cmd
+        run: |
+          echo GPU runner: %RUNNER_NAME%
+          powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\\scripts\\b3-ab-perf-ci.ps1"
+      - name: Save diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-corrected-ab-report
+          path: b3-ab-report/
+          if-no-files-found: warn

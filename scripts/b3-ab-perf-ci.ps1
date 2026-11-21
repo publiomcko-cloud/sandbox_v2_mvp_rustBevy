@@ -50,7 +50,7 @@ foreach ($arm in @('baseline','optimized')) {
     if (-not (Test-Path $png) -or (Get-Item $png).Length -lt 2000) {
         throw "B3 $arm did not produce a valid PNG file"
     }
-    $log = Get-Content -LiteralPath $stderr -Raw
+    $log = (Get-Content -LiteralPath $stderr -Raw) -replace '\x1b\[[0-9;]*m', ''
     if ($log -notmatch 'Screenshot saved to') {
         throw "B3 $arm did not confirm GPU frame capture"
     }
@@ -85,7 +85,14 @@ foreach ($arm in @('baseline','optimized')) {
     $cpuMaxMs = if ($streamCpuMax.Count) {
         ($streamCpuMax | Measure-Object -Maximum).Maximum / 1000.0
     } else { -1.0 }
-    $missingCount = @($missing | Where-Object { $_ -gt 0 }).Count
+    # Start measuring gaps only after movement begins, not during startup.
+    if ($missing.Count -ne $distance.Count) { throw "B3 $arm mismatched x/missing telemetry" }
+    $movingMissing = New-Object System.Collections.Generic.List[Int32]
+    for ($i=0; $i -lt $distance.Count; $i++) {
+        if ([Math]::Abs($distance[$i] - $distance[0]) -gt 0.25) { $movingMissing.Add($missing[$i]) }
+    }
+    if ($movingMissing.Count -lt 20) { throw "B3 $arm insufficient moving coverage: $($movingMissing.Count)" }
+    $missingCount = @($movingMissing | Where-Object { $_ -gt 0 }).Count
     $deltaX = $distance[$distance.Count-1] - $distance[0]
     $m = $frameMs | Measure-Object -Minimum -Maximum -Average
     $f = $fps | Measure-Object -Minimum -Maximum -Average
