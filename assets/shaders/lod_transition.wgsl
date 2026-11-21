@@ -116,7 +116,7 @@ struct DualVertex {
 
 fn dual_at(fine_cell_lower_half: vec3i) -> DualVertex {
     let lod = lod_at_cell(fine_cell_lower_half);
-    let step = 1 << lod;
+    let step = 1i << u32(lod);
     let lower = vec3i(
         floor_div(fine_cell_lower_half.x, step) * step,
         floor_div(fine_cell_lower_half.y, step) * step,
