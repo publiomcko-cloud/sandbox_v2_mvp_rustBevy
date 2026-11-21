@@ -14,6 +14,27 @@ use std::{
 const SHADER: &str = include_str!("../../../assets/shaders/sdf_density.wgsl");
 
 #[test]
+fn b2_surface_nets_shader_parses_and_validates() {
+    let shader = include_str!("../../../assets/shaders/surface_nets.wgsl");
+    let module = naga::front::wgsl::parse_str(shader)
+        .unwrap_or_else(|error| panic!("B2 shader parse: {}", error.emit_to_string(shader)));
+    let mut validator = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    );
+    validator
+        .validate(&module)
+        .expect("B2 Surface Nets WGSL validation failed");
+    assert!(
+        module
+            .entry_points
+            .iter()
+            .any(|e| e.name == "emit_vertices")
+    );
+    assert!(module.entry_points.iter().any(|e| e.name == "emit_indices"));
+}
+
+#[test]
 fn b1_shader_is_valid_wgsl_and_has_expected_entry_point() {
     let module = naga::front::wgsl::parse_str(SHADER)
         .unwrap_or_else(|e| panic!("WGSL parse error: {}", e.emit_to_string(SHADER)));

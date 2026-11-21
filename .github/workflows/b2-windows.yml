@@ -1,0 +1,84 @@
+name: B2 Windows Bevy resident-mesh build
+
+on:
+  push:
+    branches:
+      - 'feat/b2-*'
+    paths-ignore:
+      - 'scripts/capture-b2-ci.ps1'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b2-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        shell: pwsh
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --no-self-update
+      - name: Rustfmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: Full workspace regression
+        shell: pwsh
+        run: cargo test --workspace --locked
+      - name: Windows Release executable
+        shell: pwsh
+        run: cargo build --release --locked -p sandbox-game
+      - name: Package GPU shaders with executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/b2/assets | Out-Null
+          Copy-Item target/release/sandbox-game.exe dist/b2/sandbox-game.exe
+          Copy-Item Cargo.lock dist/b2/Cargo.lock
+          Copy-Item assets/shaders dist/b2/assets/shaders -Recurse -Force
+          foreach ($path in @(
+            "dist/b2/sandbox-game.exe",
+            "dist/b2/assets/shaders/compute_mesh.wesl",
+            "dist/b2/assets/shaders/sdf_density.wgsl",
+            "dist/b2/assets/shaders/surface_nets.wgsl"
+          )) {
+            if (-not (Test-Path $path)) { throw "Missing B2 distribution asset: $path" }
+          }
+      - name: Upload standalone B2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: b2-windows-gpu-resident
+          path: dist/b2/
+          if-no-files-found: error
+
+  visual-smoke:
+    name: Launch Windows game and capture GPU screenshots
+    needs: release
+    runs-on: [self-hosted, Windows, X64, b1-vulkan-gpu]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download built Windows release
+        uses: actions/download-artifact@v4
+        with:
+          name: b2-windows-gpu-resident
+          path: b2-runtime
+      - name: Capture surface and cave frames automatically (headless)
+        shell: cmd
+        run: powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\scripts\capture-b2-ci.ps1"
+      - name: Upload screenshots and startup logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b2-visual-report
+          path: b2-visual-report/
+          if-no-files-found: warn

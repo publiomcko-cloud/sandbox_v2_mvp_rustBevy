@@ -9,6 +9,8 @@
 //! This example does not remove the `GenerateMesh` component after
 //! generating the mesh.
 
+pub mod b2;
+
 use std::ops::Not;
 
 use bevy::{
