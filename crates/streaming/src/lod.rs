@@ -6,9 +6,9 @@
 //! requires a GPU seam-mesh gate before it can enter the render path.
 //! The current renderer stays at LOD2.
 
-use std::collections::{HashMap, HashSet};
-use sandbox_world_core::BlockCoord;
 use crate::scheduler::{StreamPlan, block_distance_xz};
+use sandbox_world_core::BlockCoord;
+use std::collections::{HashMap, HashSet};
 
 pub const NEAR_LOD0_M: f32 = 28.0;
 pub const MID_LOD1_M: f32 = 80.0;
@@ -65,7 +65,9 @@ pub struct LodFrontier {
 /// Computes desired LODs and exposes every 2:1 frontier explicitly.
 /// A missing neighbor is not treated as stitched or ready.
 pub fn frontier(plan: &StreamPlan, pos: [f32; 3]) -> LodFrontier {
-    let desired: HashMap<_, _> = plan.targets.iter()
+    let desired: HashMap<_, _> = plan
+        .targets
+        .iter()
         .map(|item| (item.coord, target_lod(block_distance_xz(pos, item.coord))))
         .collect();
     let mut coarse_neighbor_faces = HashMap::new();
@@ -79,7 +81,9 @@ pub fn frontier(plan: &StreamPlan, pos: [f32; 3]) -> LodFrontier {
                 y: block.y + dy,
                 z: block.z + dz,
             };
-            let Some(&other) = desired.get(&neighbor) else { continue };
+            let Some(&other) = desired.get(&neighbor) else {
+                continue;
+            };
             if other > lod {
                 mask |= face;
             }
@@ -93,7 +97,11 @@ pub fn frontier(plan: &StreamPlan, pos: [f32; 3]) -> LodFrontier {
             coarse_neighbor_faces.insert(block, mask);
         }
     }
-    LodFrontier { desired, coarse_neighbor_faces, mixed_faces: mixed.len() }
+    LodFrontier {
+        desired,
+        coarse_neighbor_faces,
+        mixed_faces: mixed.len(),
+    }
 }
 
 #[cfg(test)]
@@ -103,7 +111,10 @@ mod tests {
 
     #[test]
     fn range_tiers_and_hysteresis() {
-        assert_eq!([target_lod(0.0), target_lod(40.0), target_lod(125.0)], [0, 1, 2]);
+        assert_eq!(
+            [target_lod(0.0), target_lod(40.0), target_lod(125.0)],
+            [0, 1, 2]
+        );
         assert_eq!(next_lod(0, 30.0), 0);
         assert_eq!(next_lod(0, 33.0), 1);
         assert_eq!(next_lod(1, 26.0), 1);
@@ -117,20 +128,22 @@ mod tests {
 
     #[test]
     fn every_neighboring_lod_is_adjacent_not_four_to_one() {
-        for pos in [
-            [0.0, -7.0, 0.0],
-            [17.5, -7.0, -32.25],
-            [-190.0, 8.0, 111.0],
-        ] {
+        for pos in [[0.0, -7.0, 0.0], [17.5, -7.0, -32.25], [-190.0, 8.0, 111.0]] {
             let p = plan(pos, [1.0, 0.0]);
             let result = frontier(&p, pos);
             assert!(result.mixed_faces > 0);
             for (&coord, &lod) in &result.desired {
                 for &(dx, dy, dz, _) in &NEIGHBORS {
-                    let other = BlockCoord { x: coord.x + dx, y: coord.y + dy, z: coord.z + dz };
+                    let other = BlockCoord {
+                        x: coord.x + dx,
+                        y: coord.y + dy,
+                        z: coord.z + dz,
+                    };
                     if let Some(&other_lod) = result.desired.get(&other) {
-                        assert!(lod.abs_diff(other_lod) <= 1,
-                            "4:1 seam forbidden {coord:?} lod={lod}, {other:?} lod={other_lod}");
+                        assert!(
+                            lod.abs_diff(other_lod) <= 1,
+                            "4:1 seam forbidden {coord:?} lod={lod}, {other:?} lod={other_lod}"
+                        );
                     }
                 }
             }
@@ -142,7 +155,12 @@ mod tests {
         let pos = [0.0, -7.0, 0.0];
         let ring = plan(pos, [1.0, 0.0]);
         let result = frontier(&ring, pos);
-        assert!(result.coarse_neighbor_faces.values().any(|mask| mask.count_ones() > 0));
+        assert!(
+            result
+                .coarse_neighbor_faces
+                .values()
+                .any(|mask| mask.count_ones() > 0)
+        );
         assert!(result.mixed_faces > 0);
         // The test validates LOD adjacency metadata, NOT actual surface
         // triangles. A nonzero mixed_faces demands a GPU transition mesh.
