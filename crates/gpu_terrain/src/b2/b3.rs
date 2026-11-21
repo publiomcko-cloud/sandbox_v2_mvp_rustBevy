@@ -279,6 +279,8 @@ fn stream_b3(
                     handle: handle.clone(),
                     grid,
                     seed: SEED,
+                    seam_mask: 0,
+                    neighbor_lod_words: [0; 2],
                 },
                 Mesh3d(handle.clone()),
                 MeshMaterial3d(material.clone()),
