@@ -1,3 +1,5 @@
+pub mod scheduler;
+
 //! Testable publication-generation invariant; GPU synchronization arrives in B3.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

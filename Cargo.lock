@@ -5329,6 +5329,9 @@ dependencies = [
 [[package]]
 name = "sandbox-streaming"
 version = "0.1.0"
+dependencies = [
+ "sandbox-world-core",
+]
 
 [[package]]
 name = "sandbox-world-core"
