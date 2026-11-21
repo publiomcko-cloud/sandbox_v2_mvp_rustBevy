@@ -33,6 +33,8 @@ use std::collections::HashSet;
 const SEED: u32 = 42;
 const DENSITY_SHADER: &str = "shaders/sdf_density.wgsl";
 const EXTRACT_SHADER: &str = "shaders/surface_nets.wgsl";
+const TRANSITION_SHADER: &str = "shaders/lod_transition.wgsl";
+const SEAM_EDGES_PER_FACE: usize = 2 * 32 * 32;
 const FLOATS_PER_VERTEX: u32 = 8;
 const INDICES_PER_CELL: u32 = 18;
 
@@ -72,6 +74,8 @@ struct BuildSdfMesh {
     handle: Handle<Mesh>,
     grid: DensityGrid,
     seed: u32,
+    seam_mask: u32,
+    neighbor_lod_words: [u32; 2],
 }
 
 fn b2_counts(grid: DensityGrid) -> (usize, usize) {
@@ -79,6 +83,15 @@ fn b2_counts(grid: DensityGrid) -> (usize, usize) {
     // One negative halo cell along each axis. The extra cells are
     // referenced by quads owned at each block's low border.
     ((grid.cells + 1).pow(3), cells * INDICES_PER_CELL as usize)
+}
+
+fn b3_mixed_counts(grid: DensityGrid, seam_mask: u32) -> (usize, usize) {
+    let (vertices, indices) = b2_counts(grid);
+    let faces = (seam_mask & 0b111).count_ones() as usize;
+    (
+        vertices + faces * SEAM_EDGES_PER_FACE * 4,
+        indices + faces * SEAM_EDGES_PER_FACE * 6,
+    )
 }
 
 fn setup_b2_scene(
@@ -131,6 +144,8 @@ fn setup_b2_scene(
                         handle: handle.clone(),
                         grid,
                         seed: SEED,
+                        seam_mask: 0,
+                        neighbor_lod_words: [0; 2],
                     },
                     Mesh3d(handle),
                     MeshMaterial3d(material.clone()),
@@ -192,6 +207,7 @@ struct B2Pipelines {
     density: CachedComputePipelineId,
     vertices: CachedComputePipelineId,
     indices: CachedComputePipelineId,
+    transition: CachedComputePipelineId,
 }
 
 #[derive(ShaderType, Clone, Copy)]
@@ -243,6 +259,7 @@ fn init_b2_pipelines(mut commands: Commands, assets: Res<AssetServer>, cache: Re
     );
     let density_shader = assets.load(DENSITY_SHADER);
     let extract_shader = assets.load(EXTRACT_SHADER);
+    let transition_shader = assets.load(TRANSITION_SHADER);
     let density = cache.queue_compute_pipeline(ComputePipelineDescriptor {
         label: Some("B2 density compute".into()),
         layout: vec![density_layout.clone()],
@@ -263,12 +280,20 @@ fn init_b2_pipelines(mut commands: Commands, assets: Res<AssetServer>, cache: Re
         entry_point: Some("emit_indices".into()),
         ..default()
     });
+    let transition = cache.queue_compute_pipeline(ComputePipelineDescriptor {
+        label: Some("B3 2:1 adaptive dual seam GPU".into()),
+        layout: vec![surface_layout.clone()],
+        shader: transition_shader,
+        entry_point: Some("emit_transition".into()),
+        ..default()
+    });
     commands.insert_resource(B2Pipelines {
         density_layout,
         surface_layout,
         density,
         vertices,
         indices,
+        transition,
     });
 }
 
@@ -284,6 +309,7 @@ fn prepare_b2(
     if cache.get_compute_pipeline(pipelines.density).is_none()
         || cache.get_compute_pipeline(pipelines.vertices).is_none()
         || cache.get_compute_pipeline(pipelines.indices).is_none()
+        || cache.get_compute_pipeline(pipelines.transition).is_none()
     {
         pending.0.clear();
         return;
@@ -318,10 +344,16 @@ fn compute_b2(
     queue: Res<RenderQueue>,
     b3_ready: Option<Res<b3::B3ReadySet>>,
 ) {
-    let (Some(density_pipeline), Some(vertices_pipeline), Some(indices_pipeline)) = (
+    let (
+        Some(density_pipeline),
+        Some(vertices_pipeline),
+        Some(indices_pipeline),
+        Some(transition_pipeline),
+    ) = (
         cache.get_compute_pipeline(pipelines.density),
         cache.get_compute_pipeline(pipelines.vertices),
         cache.get_compute_pipeline(pipelines.indices),
+        cache.get_compute_pipeline(pipelines.transition),
     ) else {
         return;
     };
@@ -362,15 +394,15 @@ fn compute_b2(
             step_half: job.grid.step_half,
             dimension: job.grid.dim as u32,
             count: job.grid.len() as u32,
-            reserved: 0,
+            reserved: job.seam_mask,
             vertex_start,
             vertex_end,
             index_start,
             index_end,
             cells,
             padding0: 0,
-            padding1: 0,
-            padding2: 0,
+            padding1: job.neighbor_lod_words[0],
+            padding2: job.neighbor_lod_words[1],
         };
         let density_buffer = context.render_device().create_buffer(&BufferDescriptor {
             label: Some("B2 resident SDF density samples"),
@@ -430,6 +462,17 @@ fn compute_b2(
             pass.set_bind_group(0, &surface_group, &[]);
             pass.dispatch_workgroups((3 * cell_count).div_ceil(64), 1, 1);
         }
+        if job.seam_mask & 0b111 != 0 {
+            let mut pass = context
+                .command_encoder()
+                .begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("B3 adaptive LOD transition dispatch"),
+                    ..default()
+                });
+            pass.set_pipeline(transition_pipeline);
+            pass.set_bind_group(0, &surface_group, &[]);
+            pass.dispatch_workgroups((3 * SEAM_EDGES_PER_FACE as u32).div_ceil(64), 1, 1);
+        }
         // The render graph executes these stages before the camera draw.
         // Preserve each buffer for the lifetime of the mesh; no per-frame
         // uploads or runtime readback.
@@ -459,6 +502,12 @@ mod tests {
             assert_eq!(vertices, (g.cells + 1).pow(3));
             assert_eq!(indices, g.cells.pow(3) * 18);
             assert!(indices <= u32::MAX as usize);
+            for mask in 0..8 {
+                let (v, i) = b3_mixed_counts(g, mask);
+                let faces = mask.count_ones() as usize;
+                assert_eq!(v, vertices + faces * SEAM_EDGES_PER_FACE * 4);
+                assert_eq!(i, indices + faces * SEAM_EDGES_PER_FACE * 6);
+            }
         }
     }
 }

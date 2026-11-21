@@ -148,6 +148,14 @@ fn emit_indices(@builtin(global_invocation_id) gid: vec3<u32>) {
     let y = (id / p.cells) % p.cells;
     let z = id / (p.cells * p.cells);
 
+    // A mixed-LOD negative face is owned by the adaptive transition
+    // pipeline. Do NOT render a second regular quad on the same primal
+    // edge; two independent tessellations would overlap or open cracks.
+    let low_x = (p.reserved & 1u) != 0u && x == 0u && axis != 0u;
+    let low_y = (p.reserved & 2u) != 0u && y == 0u && axis != 1u;
+    let low_z = (p.reserved & 4u) != 0u && z == 0u && axis != 2u;
+    if (low_x || low_y || low_z) { return; }
+
     let sx = x + 1u;
     let sy = y + 1u;
     let sz = z + 1u;
