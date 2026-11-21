@@ -57,7 +57,10 @@ pub fn within_retention(pos: [f32; 3], coord: BlockCoord) -> bool {
 pub fn plan(pos: [f32; 3], horizontal_direction: [f32; 2]) -> StreamPlan {
     let length = horizontal_direction[0].hypot(horizontal_direction[1]);
     let forward = if length > 0.001 {
-        [horizontal_direction[0] / length, horizontal_direction[1] / length]
+        [
+            horizontal_direction[0] / length,
+            horizontal_direction[1] / length,
+        ]
     } else {
         [0.0, -1.0]
     };
@@ -77,15 +80,14 @@ pub fn plan(pos: [f32; 3], horizontal_direction: [f32; 2]) -> StreamPlan {
 
             // The projection is measured to the block's CENTER, but only
             // selects the prefetch extension (not the mandatory horizon).
-            let dx = x as f32 * BLOCK_EDGE_METERS as f32
-                + (BLOCK_EDGE_METERS as f32 * 0.5) - pos[0];
-            let dz = z as f32 * BLOCK_EDGE_METERS as f32
-                + (BLOCK_EDGE_METERS as f32 * 0.5) - pos[2];
+            let dx =
+                x as f32 * BLOCK_EDGE_METERS as f32 + (BLOCK_EDGE_METERS as f32 * 0.5) - pos[0];
+            let dz =
+                z as f32 * BLOCK_EDGE_METERS as f32 + (BLOCK_EDGE_METERS as f32 * 0.5) - pos[2];
             let lead_m = dx * forward[0] + dz * forward[1];
             let ahead = lead_m > 0.0;
-            let in_prefetch = ahead
-                && distance_m <= HORIZON_M + PREFETCH_M
-                && distance_m - HORIZON_M <= lead_m;
+            let in_prefetch =
+                ahead && distance_m <= HORIZON_M + PREFETCH_M && distance_m - HORIZON_M <= lead_m;
             if !required_now && !in_prefetch {
                 continue;
             }
@@ -111,12 +113,13 @@ pub fn plan(pos: [f32; 3], horizontal_direction: [f32; 2]) -> StreamPlan {
             .cmp(&a.required_now)
             .then_with(|| a.distance_m.total_cmp(&b.distance_m))
             .then_with(|| b.lead_m.total_cmp(&a.lead_m))
-            .then_with(|| {
-                (a.coord.x, a.coord.y, a.coord.z)
-                    .cmp(&(b.coord.x, b.coord.y, b.coord.z))
-            })
+            .then_with(|| (a.coord.x, a.coord.y, a.coord.z).cmp(&(b.coord.x, b.coord.y, b.coord.z)))
     });
-    StreamPlan { targets, desired, required }
+    StreamPlan {
+        targets,
+        desired,
+        required,
+    }
 }
 
 #[cfg(test)]
@@ -130,9 +133,16 @@ mod tests {
             for x in -12..=12 {
                 for z in -12..=12 {
                     for y in REQUIRED_LAYERS {
-                        let c = BlockCoord { x: x + (pos[0] / 16.0).floor() as i64, y, z: z + (pos[2] / 16.0).floor() as i64 };
+                        let c = BlockCoord {
+                            x: x + (pos[0] / 16.0).floor() as i64,
+                            y,
+                            z: z + (pos[2] / 16.0).floor() as i64,
+                        };
                         if block_distance_xz(pos, c) <= HORIZON_M {
-                            assert!(p.required.contains(&c), "Missing 130m coverage at {pos:?} for {c:?}");
+                            assert!(
+                                p.required.contains(&c),
+                                "Missing 130m coverage at {pos:?} for {c:?}"
+                            );
                         }
                     }
                 }
@@ -157,16 +167,32 @@ mod tests {
         let p = plan([0.0, 0.0, 0.0], [1.0, 0.0]);
         assert!(!p.targets.is_empty());
         let first_nonrequired = p.targets.iter().position(|x| !x.required_now).unwrap();
-        assert!(p.targets[..first_nonrequired].iter().all(|x| x.required_now));
-        assert!(p.targets[first_nonrequired..].iter().all(|x| !x.required_now));
+        assert!(
+            p.targets[..first_nonrequired]
+                .iter()
+                .all(|x| x.required_now)
+        );
+        assert!(
+            p.targets[first_nonrequired..]
+                .iter()
+                .all(|x| !x.required_now)
+        );
         assert!(p.desired.len() >= p.required.len());
     }
 
     #[test]
     fn forward_prefetch_is_directional_without_restricting_horizon() {
         let p = plan([0.0, 0.0, 0.0], [1.0, 0.0]);
-        assert!(p.desired.iter().any(|c| c.x >= 9 && !p.required.contains(c)));
-        assert!(!p.desired.iter().any(|c| c.x <= -10 && !p.required.contains(c)));
+        assert!(
+            p.desired
+                .iter()
+                .any(|c| c.x >= 9 && !p.required.contains(c))
+        );
+        assert!(
+            !p.desired
+                .iter()
+                .any(|c| c.x <= -10 && !p.required.contains(c))
+        );
     }
 
     #[test]
@@ -184,7 +210,12 @@ mod tests {
         // Deliberate B3 limitation until an explicit verified transition
         // topology is available. There must be no silent per-block LOD mix.
         for pos in [[0.0, -7.0, 0.0], [150.0, 6.0, 30.0]] {
-            assert!(plan(pos, [1.0, 0.0]).targets.iter().all(|_| STREAM_LOD == 2));
+            assert!(
+                plan(pos, [1.0, 0.0])
+                    .targets
+                    .iter()
+                    .all(|_| STREAM_LOD == 2)
+            );
         }
     }
 
