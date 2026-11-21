@@ -135,7 +135,12 @@ fn setup_b3_scene(
     if std::env::var("SANDBOX_B2_HEADLESS").as_deref() == Ok("1")
         || std::env::var("SANDBOX_B3_HEADLESS").as_deref() == Ok("1")
     {
-        let mut image = Image::new_target_texture(1280, 720, TextureFormat::Rgba8UnormSrgb, None);
+        let (width, height) = if std::env::var("SANDBOX_B3_RENDER_1080P").as_deref() == Ok("1") {
+            (1920, 1080)
+        } else {
+            (1280, 720)
+        };
+        let mut image = Image::new_target_texture(width, height, TextureFormat::Rgba8UnormSrgb, None);
         image.asset_usage = RenderAssetUsages::RENDER_WORLD;
         let target = images.add(image);
         commands.insert_resource(B2HeadlessTarget(target.clone()));

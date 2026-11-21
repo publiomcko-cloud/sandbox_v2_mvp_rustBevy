@@ -60,7 +60,17 @@ fn main() {
         // window cannot reliably render frames. Render to a GPU image
         // instead, following Bevy's official headless_renderer example.
         app.add_plugins(plugins.disable::<WinitPlugin>());
-        app.add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16)));
+        // Optional uncapped B3 headless throughput run: removes the 16ms
+        // scheduler sleep so frame-time measurements expose processing cost.
+        // Both A/B arms use exactly the same setting and instrumentation.
+        let cadence = if b3
+            && std::env::var("SANDBOX_B3_BENCH_UNCAPPED").as_deref() == Ok("1")
+        {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(16)
+        };
+        app.add_plugins(ScheduleRunnerPlugin::run_loop(cadence));
     } else {
         app.add_plugins(plugins);
     }
